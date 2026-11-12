@@ -1,4 +1,4 @@
-# DevScope — GitHub Profile Lookup (MVP)
+# DevExplore — GitHub Profile Lookup (MVP)
 
 Search a GitHub username and see the public profile, plus a compact list of users whose username **starts with** what you typed (avatar, username, account type). Profiles and prefix-search results are saved in a **shared Supabase cache**, so the next visitor (any browser, any session) gets the cached copy without another GitHub API request.
 

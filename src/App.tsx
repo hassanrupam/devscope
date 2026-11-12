@@ -43,7 +43,7 @@ export default function App() {
     <div className="mx-auto flex min-h-screen w-full max-w-2xl flex-col px-4 py-10 sm:py-16">
       <header className="mb-8 text-center">
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-          Dev<span className="text-indigo-600 dark:text-indigo-400">Scope</span>
+          Dev<span className="text-indigo-600 dark:text-indigo-400">Explore</span>
         </h1>
         <p className="mt-2 text-slate-600 dark:text-slate-400">Look up any public GitHub developer profile.</p>
       </header>
