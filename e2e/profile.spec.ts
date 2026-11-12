@@ -1,0 +1,232 @@
+import { expect, test, type Browser, type Page } from '@playwright/test'
+
+/**
+ * These tests mock GitHub and a stateful in-memory stand-in for the Supabase RPC
+ * functions. The "database" object is shared between separate browser contexts, which
+ * models the shared cache seen by different visitors.
+ */
+
+const octocat = {
+  id: 583231,
+  login: 'octocat',
+  type: 'User',
+  avatar_url: 'https://avatars.githubusercontent.com/u/583231?v=4',
+  html_url: 'https://github.com/octocat',
+  name: 'The Octocat',
+  bio: 'Mascot of GitHub',
+  company: '@github',
+  location: 'San Francisco',
+  blog: 'https://github.blog',
+  public_repos: 8,
+  followers: 1000,
+  following: 9,
+  created_at: '2011-01-25T18:44:36Z',
+}
+
+interface FakeDb {
+  rows: Map<string, { profile: unknown; fetched_at: string }>
+  searchRows: Map<string, { results: unknown; fetched_at: string }>
+  githubRequests: string[]
+  searchRequests: string[]
+  githubStatus: number
+}
+
+const newDb = (): FakeDb => ({
+  rows: new Map(),
+  searchRows: new Map(),
+  githubRequests: [],
+  searchRequests: [],
+  githubStatus: 200,
+})
+
+const KNOWN_LOGINS = ['octocat', 'octocatfan', 'foo-octocat'] // last one must be filtered out for prefix "octo"
+const searchItem = (id: number, login: string) => ({
+  id,
+  login,
+  type: 'User',
+  avatar_url: `https://avatars.githubusercontent.com/u/${id}?v=4`,
+  html_url: `https://github.com/${login}`,
+})
+
+async function mockBackends(page: Page, db: FakeDb) {
+  await page.route('https://avatars.githubusercontent.com/**', (route) =>
+    route.fulfill({ status: 200, contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg"/>' }),
+  )
+
+  await page.route('https://api.github.com/users/*', async (route) => {
+    const username = decodeURIComponent(new URL(route.request().url()).pathname.split('/').pop() ?? '')
+    db.githubRequests.push(username)
+    const cors = { 'access-control-allow-origin': '*' }
+    if (db.githubStatus !== 200) {
+      return route.fulfill({ status: db.githubStatus, headers: cors, json: {} })
+    }
+    if (username === 'octocat') return route.fulfill({ status: 200, headers: cors, json: octocat })
+    return route.fulfill({ status: 404, headers: cors, json: { message: 'Not Found' } })
+  })
+
+  await page.route('https://api.github.com/search/users*', async (route) => {
+    const cors = { 'access-control-allow-origin': '*' }
+    const q = new URL(route.request().url()).searchParams.get('q') ?? ''
+    const prefix = q.replace(' in:login', '')
+    db.searchRequests.push(prefix)
+    if (db.githubStatus !== 200) return route.fulfill({ status: db.githubStatus, headers: cors, json: {} })
+    // Like GitHub, match anywhere in the login (the app must filter down to prefix matches).
+    const items = KNOWN_LOGINS.filter((l) => l.includes(prefix)).map((l, i) => searchItem(i + 1, l))
+    return route.fulfill({ status: 200, headers: cors, json: { total_count: items.length, items } })
+  })
+
+  await page.route('http://127.0.0.1:54321/rest/v1/rpc/*', async (route) => {
+    const cors = {
+      'access-control-allow-origin': '*',
+      'access-control-allow-headers': '*',
+      'access-control-allow-methods': 'POST, OPTIONS',
+    }
+    const request = route.request()
+    if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors })
+
+    const fn = new URL(request.url()).pathname.split('/').pop()
+    const args = request.postDataJSON() as {
+      p_username?: string
+      p_profile?: unknown
+      p_prefix?: string
+      p_results?: unknown
+    }
+    const key = args.p_username ?? args.p_prefix ?? ''
+    switch (fn) {
+      case 'get_cached_profile':
+        return route.fulfill({ status: 200, headers: cors, json: db.rows.get(key) ?? null })
+      case 'get_cached_search':
+        return route.fulfill({ status: 200, headers: cors, json: db.searchRows.get(key) ?? null })
+      case 'acquire_profile_refresh_lock':
+      case 'acquire_search_refresh_lock':
+        return route.fulfill({ status: 200, headers: cors, json: true })
+      case 'release_profile_refresh_lock':
+      case 'release_search_refresh_lock':
+        return route.fulfill({ status: 204, headers: cors })
+      case 'upsert_cached_search': {
+        const fetched_at = new Date().toISOString()
+        db.searchRows.set(key, { results: args.p_results, fetched_at })
+        return route.fulfill({ status: 200, headers: cors, json: fetched_at })
+      }
+      case 'upsert_cached_profile': {
+        const fetched_at = new Date().toISOString()
+        db.rows.set(key, { profile: args.p_profile, fetched_at })
+        return route.fulfill({ status: 200, headers: cors, json: fetched_at })
+      }
+      default:
+        return route.fulfill({ status: 404, headers: cors, json: {} })
+    }
+  })
+}
+
+async function newVisitor(browser: Browser, db: FakeDb) {
+  const context = await browser.newContext()
+  const page = await context.newPage()
+  await mockBackends(page, db)
+  await page.goto('/')
+  return { page, context }
+}
+
+async function search(page: Page, username: string) {
+  await page.getByLabel('GitHub username').fill(username)
+  await page.getByRole('button', { name: 'Search' }).click()
+}
+
+test('first search hits GitHub and stores the profile; a second visitor gets the shared cache', async ({ browser }) => {
+  const db = newDb()
+
+  const first = await newVisitor(browser, db)
+  await search(first.page, 'octocat')
+  await expect(first.page.getByRole('heading', { name: 'The Octocat' })).toBeVisible()
+  await expect(first.page.getByTestId('result-status')).toContainText('Live from GitHub')
+  expect(db.githubRequests).toEqual(['octocat'])
+  expect(db.rows.has('octocat')).toBe(true)
+
+  // Separate browser context = separate visitor with empty browser storage.
+  const second = await newVisitor(browser, db)
+  await search(second.page, 'OctoCat') // different capitalisation
+  await expect(second.page.getByRole('heading', { name: 'The Octocat' })).toBeVisible()
+  await expect(second.page.getByTestId('result-status')).toContainText('Shared cache')
+  expect(db.githubRequests).toEqual(['octocat']) // still exactly one GitHub request
+
+  await first.context.close()
+  await second.context.close()
+})
+
+test('unknown user shows a not-found state and nothing is cached', async ({ browser }) => {
+  const db = newDb()
+  const { page, context } = await newVisitor(browser, db)
+
+  await search(page, 'definitely-not-a-user')
+  await expect(page.getByText('No GitHub user named "definitely-not-a-user" was found.')).toBeVisible()
+  await expect(page.getByText('No users found whose username starts with')).toBeVisible()
+  expect(db.rows.size).toBe(0)
+  await context.close()
+})
+
+test('invalid input is rejected client-side without any request', async ({ browser }) => {
+  const db = newDb()
+  const { page, context } = await newVisitor(browser, db)
+
+  await search(page, 'bad name!')
+  await expect(page.getByRole('alert')).toContainText('not a valid GitHub username')
+  expect(db.githubRequests).toHaveLength(0)
+  await context.close()
+})
+
+test('expired cache entry is shown as stale when GitHub fails', async ({ browser }) => {
+  const db = newDb()
+  const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
+  db.rows.set('octocat', { profile: octocat, fetched_at: tenDaysAgo })
+  db.githubStatus = 503
+
+  const { page, context } = await newVisitor(browser, db)
+  await search(page, 'octocat')
+
+  await expect(page.getByRole('heading', { name: 'The Octocat' })).toBeVisible()
+  await expect(page.getByTestId('result-status')).toContainText('may be outdated')
+  await expect(page.getByRole('status').first()).toContainText('may be out of date')
+  await context.close()
+})
+
+test('typing a prefix lists matching users, caches the list, and a tile opens the full profile', async ({ browser }) => {
+  const db = newDb()
+
+  const first = await newVisitor(browser, db)
+  await search(first.page, 'octo')
+
+  // "foo-octocat" contains the text but does not start with it, so it must not be listed.
+  const tiles = first.page.getByTestId('user-list').getByRole('listitem')
+  await expect(tiles).toHaveCount(2)
+  await expect(tiles.nth(0)).toContainText('octocat')
+  await expect(tiles.nth(1)).toContainText('octocatfan')
+  await expect(first.page.getByTestId('search-status')).toContainText('Live from GitHub')
+  expect(db.searchRequests).toEqual(['octo'])
+  expect(db.searchRows.has('octo')).toBe(true)
+
+  // Selecting a tile opens the (cached) full profile.
+  await first.page.getByRole('button', { name: 'View profile of octocat', exact: true }).click()
+  await expect(first.page.getByRole('heading', { name: 'The Octocat' })).toBeVisible()
+  expect(db.rows.has('octocat')).toBe(true)
+
+  // A different visitor searching the same prefix (different capitalisation) hits the shared cache only.
+  const second = await newVisitor(browser, db)
+  await search(second.page, 'OCTO')
+  await expect(second.page.getByTestId('user-list').getByRole('listitem')).toHaveCount(2)
+  await expect(second.page.getByTestId('search-status')).toContainText('Shared cache')
+  expect(db.searchRequests).toEqual(['octo']) // still exactly one GitHub search request
+
+  await first.context.close()
+  await second.context.close()
+})
+
+test('a full username still shows its profile and also lists users that start with it', async ({ browser }) => {
+  const db = newDb()
+  const { page, context } = await newVisitor(browser, db)
+
+  await search(page, 'octocat')
+  await expect(page.getByRole('heading', { name: 'The Octocat' })).toBeVisible()
+  await expect(page.getByTestId('user-list').getByRole('listitem')).toHaveCount(2)
+  await context.close()
+})
+
