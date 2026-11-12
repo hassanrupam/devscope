@@ -1,7 +1,7 @@
 # DevExplore — GitHub Profile Lookup (MVP)
 
 Search a GitHub username and see the public profile, plus a compact list of users whose username **starts with** what you typed (avatar, username, account type). Profiles and prefix-search results are saved in a **shared Supabase cache**, so the next visitor (any browser, any session) gets the cached copy without another GitHub API request.
-
+ 
 Static Vite + React + TypeScript app. No backend, no Vercel Functions, free tiers only.
 
 ## Stack
@@ -9,7 +9,7 @@ Static Vite + React + TypeScript app. No backend, no Vercel Functions, free tier
 TypeScript · React · Vite · Tailwind CSS v4 · TanStack Query · Zod · Supabase (PostgreSQL + JS client) · Vitest · Playwright · Vercel Hobby.
 
 UI primitives (`Button`, `Card`, `Badge`) live in `src/components/ui` using the shadcn/ui conventions (Tailwind + `cn()` helper). The shadcn CLI is not required.
-
+ 
 ## Prerequisites
 
 - Node.js 20+ and npm
