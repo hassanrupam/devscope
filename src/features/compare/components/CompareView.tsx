@@ -77,7 +77,7 @@ export function CompareView({ users, onAdd, onClear, onRemove }: CompareViewProp
               </button>
             ) : null}
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap justify-center gap-2 sm:justify-start sm:gap-3">
             <Button type="submit" disabled={full}>
               <PlusIcon />
               Add user

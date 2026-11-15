@@ -267,6 +267,47 @@ test('theme toggle switches between light and dark and remembers the choice', as
   await context.close()
 })
 
+test('Explore and Compare fit mobile, desktop, and 4K viewports without page overflow', async ({ browser }) => {
+  const db = newDb()
+  const context = await browser.newContext({ viewport: { width: 320, height: 900 } })
+  const page = await context.newPage()
+  await mockBackends(page, db)
+  await page.goto('/')
+
+  await search(page, 'octocat')
+  await expect(page.getByRole('heading', { name: 'The Octocat' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Repositories & languages' })).toBeVisible()
+
+  const widths = [320, 360, 390, 640, 768, 1024, 1440, 1920, 2560, 3840]
+  async function expectNoPageOverflow() {
+    const dimensions = await page.evaluate(() => ({
+      viewport: window.innerWidth,
+      document: document.documentElement.scrollWidth,
+    }))
+    expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport)
+  }
+
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 900 })
+    await expectNoPageOverflow()
+  }
+
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Compare', exact: true }).click()
+  const input = page.getByLabel('Add a GitHub username to compare')
+  await input.fill('octocat')
+  await page.getByRole('button', { name: 'Add user' }).click()
+  await input.fill('octocatfan')
+  await page.getByRole('button', { name: 'Add user' }).click()
+  await expect(page.getByTestId('compare-table')).toBeVisible()
+
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 900 })
+    await expectNoPageOverflow()
+  }
+
+  await context.close()
+})
+
 test('expired cache entry is shown as stale when GitHub fails', async ({ browser }) => {
   const db = newDb()
   const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()

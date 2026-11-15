@@ -24,7 +24,7 @@ function NavTab({ active, onClick, children }: { active: boolean; onClick: () =>
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'inline-flex w-36 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+        'inline-flex w-32 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:w-36 sm:px-4',
         active
           ? 'bg-indigo-600 text-white'
           : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800',
@@ -96,10 +96,10 @@ export default function App() {
   const shownLogin = profile.data?.profile.login ?? null
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-10 sm:py-16">
-      <header className="mb-8 text-center">
+    <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col px-4 py-6 sm:px-6 sm:py-10 lg:px-8 xl:px-10 2xl:px-12">
+      <header className="mb-6 text-center sm:mb-8">
         <div className="relative flex items-center justify-center">
-          <h1 className="text-2xl font-bold tracking-tight sm:text-4xl">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-4xl 2xl:text-5xl">
             Dev<span className="text-indigo-600 dark:text-indigo-400">Explore</span>
           </h1>
           <ThemeToggle />
@@ -117,7 +117,7 @@ export default function App() {
         </nav>
       </header>
 
-      <main className="flex-1 space-y-8">
+      <main className="flex-1 space-y-6 sm:space-y-8">
         {view === 'compare' ? (
           <CompareView users={compareUsers} onAdd={addToComparison} onClear={clearComparison} onRemove={removeFromComparison} />
         ) : (
@@ -131,7 +131,7 @@ export default function App() {
             />
 
             {query === null ? (
-              <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400 sm:p-8">
                 Enter a username above to see their public profile, repositories and matching users.
               </p>
             ) : null}
@@ -201,7 +201,7 @@ export default function App() {
         )}
       </main>
 
-      <footer className="mt-12 text-center text-xs text-slate-500">
+      <footer className="mx-auto mt-10 max-w-prose text-center text-xs text-slate-500 sm:mt-12">
         Public data from the GitHub API. Profiles, repositories and searches are cached for a few days to stay within
         GitHub rate limits.
       </footer>

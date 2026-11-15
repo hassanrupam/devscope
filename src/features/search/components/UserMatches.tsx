@@ -130,7 +130,7 @@ export function UserMatches({ prefix, selectedLogin, onSelect, onCompare, isInCo
               No users found whose username starts with “{prefix}”.
             </Card>
           ) : (
-            <ul className="space-y-2" data-testid="user-list">
+            <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 2xl:grid-cols-3" data-testid="user-list">
               {data.users.map((user) => (
                 <UserTile
                   key={user.id}

@@ -27,7 +27,7 @@ export function ProfileCard({ profile, actions }: { profile: GitHubProfile; acti
   const memberSince = profile.created_at ? new Date(profile.created_at).getFullYear() : null
 
   return (
-    <Card className="p-6 sm:p-8">
+    <Card className="p-4 sm:p-6 lg:p-8">
       <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-start sm:text-left">
         <img
           src={profile.avatar_url}
@@ -43,13 +43,13 @@ export function ProfileCard({ profile, actions }: { profile: GitHubProfile; acti
         </div>
       </div>
 
-      <dl className="mt-6 grid grid-cols-3 gap-3">
+      <dl className="mt-5 grid grid-cols-3 gap-2 sm:mt-6 sm:gap-3">
         <Stat label="Repos" value={profile.public_repos} />
         <Stat label="Followers" value={profile.followers} />
         <Stat label="Following" value={profile.following} />
       </dl>
 
-      <ul className="mt-6 space-y-2">
+      <ul className="mt-5 space-y-2 sm:mt-6">
         {profile.company ? <Detail label="Company">{profile.company}</Detail> : null}
         {profile.location ? <Detail label="Location">{profile.location}</Detail> : null}
         {website ? (
@@ -67,7 +67,7 @@ export function ProfileCard({ profile, actions }: { profile: GitHubProfile; acti
         {memberSince ? <Detail label="Joined">{memberSince}</Detail> : null}
       </ul>
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
+      <div className="mt-5 flex flex-wrap items-center gap-2 sm:mt-6 sm:gap-3">
         <a
           href={profile.html_url}
           target="_blank"

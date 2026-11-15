@@ -57,7 +57,7 @@ export function SearchForm({ initialValue = '', hasSearch, isLoading, onSearch, 
             spellCheck={false}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? 'username-error' : 'username-hint'}
-            className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 pr-11 text-base text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+            className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 pr-11 text-base text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:px-4"
           />
           {value ? (
             <button
@@ -70,7 +70,7 @@ export function SearchForm({ initialValue = '', hasSearch, isLoading, onSearch, 
             </button>
           ) : null}
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap justify-center gap-2 sm:justify-start sm:gap-3">
           <Button type="submit" disabled={isLoading}>
             {isLoading ? (
               <>

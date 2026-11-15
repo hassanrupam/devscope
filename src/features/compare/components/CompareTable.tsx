@@ -96,7 +96,12 @@ export function CompareTable({ columns, onRemove }: { columns: ComparisonColumn[
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div
+        role="region"
+        aria-label="Comparison table; scroll horizontally to see all users"
+        tabIndex={0}
+        className="overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-200 bg-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 dark:border-slate-800 dark:bg-slate-900"
+      >
         <table className="w-full min-w-[36rem] border-collapse" data-testid="compare-table">
           <caption className="sr-only">Side-by-side comparison of GitHub users</caption>
           <thead>

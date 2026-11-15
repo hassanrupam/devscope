@@ -48,7 +48,7 @@ export function RepoDetails({ profile }: { profile: GitHubProfile }) {
   const { data, error, isFetching } = useRepos(profile.login)
 
   return (
-    <Card className="p-6 sm:p-8" aria-labelledby="repo-details-heading">
+    <Card className="p-4 sm:p-6 lg:p-8" aria-labelledby="repo-details-heading">
       <h2 id="repo-details-heading" className="text-lg font-semibold">
         Repositories &amp; languages
       </h2>
@@ -78,7 +78,7 @@ function RepoDetailsBody({ profile, result }: { profile: GitHubProfile; result: 
     <div className="mt-3 space-y-5">
       <ResultStatus result={result} testId="repos-status" />
 
-      <dl className="grid grid-cols-3 gap-3" data-testid="repo-totals">
+      <dl className="grid grid-cols-3 gap-2 sm:gap-3" data-testid="repo-totals">
         <Tile label="Stars" value={summary.totalStars} />
         <Tile label="Forks" value={summary.totalForks} />
         <Tile label="Own repos" value={summary.originalRepos} />
@@ -98,7 +98,7 @@ function RepoDetailsBody({ profile, result }: { profile: GitHubProfile; result: 
         {summary.topRepos.length === 0 ? (
           <p className="text-sm text-slate-500 dark:text-slate-400">No original public repositories.</p>
         ) : (
-          <ul className="space-y-2" data-testid="top-repos">
+          <ul className="grid grid-cols-1 gap-2 lg:grid-cols-2" data-testid="top-repos">
             {summary.topRepos.map((repo) => (
               <RepoRow key={repo.id} repo={repo} />
             ))}
