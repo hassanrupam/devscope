@@ -6,6 +6,19 @@
     <meta name="description" content="DevExplore: explore and compare public GitHub developers." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>DevExplore</title>
+    <script>
+      ;(() => {
+        let savedTheme = null
+        try {
+          savedTheme = localStorage.getItem('devscope-theme')
+        } catch (error) {
+          console.warn('Could not read saved theme preference.', error)
+        }
+        const isDark = savedTheme === 'dark' || (savedTheme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', isDark)
+        document.documentElement.style.colorScheme = isDark ? 'dark' : 'light'
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

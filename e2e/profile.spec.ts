@@ -236,6 +236,37 @@ test('invalid input is rejected client-side without any request', async ({ brows
   await context.close()
 })
 
+test('theme toggle switches between light and dark and remembers the choice', async ({ browser }) => {
+  const db = newDb()
+  const context = await browser.newContext({ colorScheme: 'light' })
+  const page = await context.newPage()
+  await mockBackends(page, db)
+  await page.goto('/')
+
+  const headingCenter = await page.getByRole('heading', { name: 'DevExplore' }).evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    return box.top + box.height / 2
+  })
+  const toggleCenter = await page.getByRole('button', { name: 'Switch to dark theme' }).evaluate((element) => {
+    const box = element.getBoundingClientRect()
+    return box.top + box.height / 2
+  })
+  expect(Math.abs(headingCenter - toggleCenter)).toBeLessThan(1)
+
+  const switchToDark = page.getByRole('button', { name: 'Switch to dark theme' })
+  await expect(switchToDark).toHaveAttribute('aria-pressed', 'false')
+  await switchToDark.click()
+  await expect(page.locator('html')).toHaveClass(/dark/)
+
+  await page.reload()
+  const switchToLight = page.getByRole('button', { name: 'Switch to light theme' })
+  await expect(switchToLight).toHaveAttribute('aria-pressed', 'true')
+  await switchToLight.click()
+  await expect(page.locator('html')).not.toHaveClass(/dark/)
+
+  await context.close()
+})
+
 test('expired cache entry is shown as stale when GitHub fails', async ({ browser }) => {
   const db = newDb()
   const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()

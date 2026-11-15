@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ArrowRightIcon, CheckIcon, CompareIcon, PlusIcon, SearchIcon } from '@/components/ui/icons'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { config } from '@/config'
 import { toAppError } from '@/lib/errors'
 import { cn } from '@/lib/utils'
@@ -97,9 +98,12 @@ export default function App() {
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-10 sm:py-16">
       <header className="mb-8 text-center">
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-          Dev<span className="text-indigo-600 dark:text-indigo-400">Explore</span>
-        </h1>
+        <div className="relative flex items-center justify-center">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-4xl">
+            Dev<span className="text-indigo-600 dark:text-indigo-400">Explore</span>
+          </h1>
+          <ThemeToggle />
+        </div>
         <p className="mt-2 text-slate-600 dark:text-slate-400">Explore and compare public GitHub developers.</p>
         <nav aria-label="Main" className="mt-5 inline-flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-900">
           <NavTab active={view === 'explore'} onClick={() => setView('explore')}>
