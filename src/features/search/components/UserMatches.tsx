@@ -13,9 +13,22 @@ interface UserMatchesProps {
   /** Login whose full profile is currently shown, to highlight its tile. */
   selectedLogin: string | null
   onSelect: (login: string) => void
+  /** Adds a user to the comparison; when omitted the tiles have no compare button. */
+  onCompare?: (login: string) => void
+  /** True for logins already in the comparison (button disabled). */
+  isInComparison?: (login: string) => boolean
+  /** True when no more users can be added. */
+  comparisonFull?: boolean
 }
 
-function UserTile({ user, selected, onSelect }: { user: SearchUser; selected: boolean; onSelect: () => void }) {
+interface UserTileProps {
+  user: SearchUser
+  selected: boolean
+  onSelect: () => void
+  compare?: { added: boolean; full: boolean; onCompare: () => void }
+}
+
+function UserTile({ user, selected, onSelect, compare }: UserTileProps) {
   return (
     <li>
       <div
@@ -56,6 +69,17 @@ function UserTile({ user, selected, onSelect }: { user: SearchUser; selected: bo
         >
           GitHub ↗
         </a>
+        {compare ? (
+          <button
+            type="button"
+            onClick={compare.onCompare}
+            disabled={compare.added || compare.full}
+            aria-label={compare.added ? `${user.login} is in the comparison` : `Add ${user.login} to compare`}
+            className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            {compare.added ? '✓ Added' : '+ Compare'}
+          </button>
+        ) : null}
       </div>
     </li>
   )
@@ -74,7 +98,7 @@ function ListSkeleton() {
   )
 }
 
-export function UserMatches({ prefix, selectedLogin, onSelect }: UserMatchesProps) {
+export function UserMatches({ prefix, selectedLogin, onSelect, onCompare, isInComparison, comparisonFull }: UserMatchesProps) {
   const { data, error, isFetching } = useUserSearch(prefix)
 
   return (
@@ -102,6 +126,15 @@ export function UserMatches({ prefix, selectedLogin, onSelect }: UserMatchesProp
                   user={user}
                   selected={selectedLogin?.toLowerCase() === user.login.toLowerCase()}
                   onSelect={() => onSelect(user.login)}
+                  compare={
+                    onCompare
+                      ? {
+                          added: isInComparison?.(user.login) ?? false,
+                          full: comparisonFull ?? false,
+                          onCompare: () => onCompare(user.login),
+                        }
+                      : undefined
+                  }
                 />
               ))}
             </ul>

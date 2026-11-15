@@ -23,9 +23,48 @@ const octocat = {
   created_at: '2011-01-25T18:44:36Z',
 }
 
+const octocatfan = {
+  ...octocat,
+  id: 999,
+  login: 'octocatfan',
+  name: 'Octo Fan',
+  bio: 'Fan of the Octocat',
+  avatar_url: 'https://avatars.githubusercontent.com/u/999?v=4',
+  html_url: 'https://github.com/octocatfan',
+  followers: 50,
+  following: 3,
+  public_repos: 1,
+}
+
+const repo = (id: number, owner: string, name: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  name,
+  html_url: `https://github.com/${owner}/${name}`,
+  description: `${name} description`,
+  language: 'Go',
+  stargazers_count: 0,
+  forks_count: 0,
+  fork: false,
+  archived: false,
+  pushed_at: '2026-10-01T00:00:00Z',
+  ...extra,
+})
+
+// octocat: 2 own repos (120 stars, 15 forks) + 1 fork that must be ignored in every figure
+const REPOS: Record<string, unknown[]> = {
+  octocat: [
+    repo(101, 'octocat', 'hello-world', { stargazers_count: 100, forks_count: 10, language: 'Go' }),
+    repo(102, 'octocat', 'spoon-knife', { stargazers_count: 20, forks_count: 5, language: 'TypeScript' }),
+    repo(103, 'octocat', 'forked-thing', { stargazers_count: 5000, forks_count: 900, language: 'Rust', fork: true }),
+  ],
+  octocatfan: [repo(201, 'octocatfan', 'fan-site', { stargazers_count: 7, forks_count: 1, language: 'Go' })],
+}
+
 interface FakeDb {
   rows: Map<string, { profile: unknown; fetched_at: string }>
   searchRows: Map<string, { results: unknown; fetched_at: string }>
+  repoRows: Map<string, { repos: unknown; fetched_at: string }>
+  repoRequests: string[]
   githubRequests: string[]
   searchRequests: string[]
   githubStatus: number
@@ -34,6 +73,8 @@ interface FakeDb {
 const newDb = (): FakeDb => ({
   rows: new Map(),
   searchRows: new Map(),
+  repoRows: new Map(),
+  repoRequests: [],
   githubRequests: [],
   searchRequests: [],
   githubStatus: 200,
@@ -61,7 +102,18 @@ async function mockBackends(page: Page, db: FakeDb) {
       return route.fulfill({ status: db.githubStatus, headers: cors, json: {} })
     }
     if (username === 'octocat') return route.fulfill({ status: 200, headers: cors, json: octocat })
+    if (username === 'octocatfan') return route.fulfill({ status: 200, headers: cors, json: octocatfan })
     return route.fulfill({ status: 404, headers: cors, json: { message: 'Not Found' } })
+  })
+
+  await page.route('https://api.github.com/users/*/repos*', async (route) => {
+    const cors = { 'access-control-allow-origin': '*' }
+    const username = decodeURIComponent(new URL(route.request().url()).pathname.split('/')[2] ?? '')
+    db.repoRequests.push(username)
+    if (db.githubStatus !== 200) return route.fulfill({ status: db.githubStatus, headers: cors, json: {} })
+    const repos = REPOS[username]
+    if (!repos) return route.fulfill({ status: 404, headers: cors, json: { message: 'Not Found' } })
+    return route.fulfill({ status: 200, headers: cors, json: repos })
   })
 
   await page.route('https://api.github.com/search/users*', async (route) => {
@@ -90,18 +142,28 @@ async function mockBackends(page: Page, db: FakeDb) {
       p_profile?: unknown
       p_prefix?: string
       p_results?: unknown
+      p_repos?: unknown
     }
     const key = args.p_username ?? args.p_prefix ?? ''
     switch (fn) {
       case 'get_cached_profile':
         return route.fulfill({ status: 200, headers: cors, json: db.rows.get(key) ?? null })
+      case 'get_cached_repos':
+        return route.fulfill({ status: 200, headers: cors, json: db.repoRows.get(key) ?? null })
+      case 'upsert_cached_repos': {
+        const fetched_at = new Date().toISOString()
+        db.repoRows.set(key, { repos: args.p_repos, fetched_at })
+        return route.fulfill({ status: 200, headers: cors, json: fetched_at })
+      }
       case 'get_cached_search':
         return route.fulfill({ status: 200, headers: cors, json: db.searchRows.get(key) ?? null })
       case 'acquire_profile_refresh_lock':
       case 'acquire_search_refresh_lock':
+      case 'acquire_repos_refresh_lock':
         return route.fulfill({ status: 200, headers: cors, json: true })
       case 'release_profile_refresh_lock':
       case 'release_search_refresh_lock':
+      case 'release_repos_refresh_lock':
         return route.fulfill({ status: 204, headers: cors })
       case 'upsert_cached_search': {
         const fetched_at = new Date().toISOString()
@@ -227,6 +289,102 @@ test('a full username still shows its profile and also lists users that start wi
   await search(page, 'octocat')
   await expect(page.getByRole('heading', { name: 'The Octocat' })).toBeVisible()
   await expect(page.getByTestId('user-list').getByRole('listitem')).toHaveCount(2)
+  await context.close()
+})
+
+test('profile shows repository details (forks excluded) and a second visitor gets them from the shared cache', async ({ browser }) => {
+  const db = newDb()
+
+  const first = await newVisitor(browser, db)
+  await search(first.page, 'octocat')
+  await expect(first.page.getByRole('heading', { name: 'Repositories & languages' })).toBeVisible()
+
+  const totals = first.page.getByTestId('repo-totals')
+  await expect(totals).toContainText('120') // 100 + 20 stars, the 5,000-star fork is ignored
+  await expect(totals).toContainText('15') // forks received
+  await expect(first.page.getByTestId('repos-status')).toContainText('Live from GitHub')
+  await expect(first.page.getByRole('img', { name: /Languages: Go 50%, TypeScript 50%/ })).toBeVisible()
+  const topRepos = first.page.getByTestId('top-repos').getByRole('listitem')
+  await expect(topRepos).toHaveCount(2)
+  await expect(topRepos.first()).toContainText('hello-world')
+  expect(db.repoRequests).toEqual(['octocat'])
+  expect(db.repoRows.has('octocat')).toBe(true)
+
+  const second = await newVisitor(browser, db)
+  await search(second.page, 'OctoCat')
+  await expect(second.page.getByTestId('repos-status')).toContainText('Shared cache')
+  await expect(second.page.getByTestId('repo-totals')).toContainText('120')
+  expect(db.repoRequests).toEqual(['octocat']) // no second GitHub repos request
+
+  await first.context.close()
+  await second.context.close()
+})
+
+test('compare view lists users side by side and highlights the highest value in each row', async ({ browser }) => {
+  const db = newDb()
+  const { page, context } = await newVisitor(browser, db)
+
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: /Compare/ }).click()
+  await expect(page.getByText('Add at least two users to see them side by side.')).toBeVisible()
+
+  const input = page.getByLabel('Add a GitHub username to compare')
+  await input.fill('OctoCat')
+  await page.getByRole('button', { name: 'Add user' }).click()
+  await expect(page.getByText('Add one more user to start comparing.')).toBeVisible()
+
+  // Duplicates and invalid names are rejected with a message.
+  await input.fill('octocat')
+  await page.getByRole('button', { name: 'Add user' }).click()
+  await expect(page.getByRole('alert')).toContainText('already in the comparison')
+  await input.fill('bad name!')
+  await page.getByRole('button', { name: 'Add user' }).click()
+  await expect(page.getByRole('alert')).toContainText('not a valid GitHub username')
+
+  await input.fill('octocatfan')
+  await page.getByRole('button', { name: 'Add user' }).click()
+
+  const table = page.getByTestId('compare-table')
+  await expect(table).toBeVisible()
+  await expect(table.getByRole('columnheader', { name: /The Octocat/ })).toBeVisible()
+  await expect(table.getByRole('columnheader', { name: /Octo Fan/ })).toBeVisible()
+
+  const followers = page.getByTestId('metric-followers')
+  await expect(followers.locator('td').nth(0)).toContainText('1,000')
+  await expect(followers.locator('td').nth(0)).toContainText('(highest)')
+  await expect(followers.locator('td').nth(1)).toContainText('50')
+  await expect(followers.locator('td').nth(1)).not.toContainText('(highest)')
+
+  const stars = page.getByTestId('metric-stars')
+  await expect(stars.locator('td').nth(0)).toContainText('120')
+  await expect(stars.locator('td').nth(1)).toContainText('7')
+  await expect(stars.locator('td').nth(0)).toContainText('(highest)')
+
+  // "Following" is not a win-by-more metric, so nothing is highlighted there.
+  await expect(page.getByTestId('metric-following')).not.toContainText('(highest)')
+
+  // The comparison is reflected in the URL so it can be shared.
+  await expect(page).toHaveURL(/view=compare&users=octocat,octocatfan/)
+
+  await page.getByRole('button', { name: 'Remove octocatfan from comparison' }).click()
+  await expect(page.getByText('Add one more user to start comparing.')).toBeVisible()
+  await context.close()
+})
+
+test('a compare link restores the comparison, and "Add to compare" feeds it from a profile', async ({ browser }) => {
+  const db = newDb()
+  const { page, context } = await newVisitor(browser, db)
+
+  await page.goto('/?view=compare&users=octocat,octocatfan')
+  await expect(page.getByTestId('compare-table')).toBeVisible()
+  await expect(page.getByTestId('metric-followers').locator('td').nth(0)).toContainText('1,000')
+
+  // Switching to Explore and adding a profile to the comparison.
+  await page.goto('/')
+  await search(page, 'octocat')
+  await expect(page.getByRole('heading', { name: 'The Octocat' })).toBeVisible()
+  await page.getByRole('button', { name: '+ Add to compare' }).click()
+  await expect(page.getByRole('button', { name: /In comparison/ })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Compare (1)' })).toBeVisible()
   await context.close()
 })
 

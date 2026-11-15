@@ -1,4 +1,4 @@
--- DevScope: shared GitHub profile cache.
+-- DevExplore: shared GitHub profile cache.
 --
 -- Security model
 --   * Tables have RLS enabled and NO policies, and all table privileges are revoked

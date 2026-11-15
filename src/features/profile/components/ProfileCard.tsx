@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Card } from '@/components/ui/card'
 import { formatCount, toSafeWebUrl } from '@/lib/utils'
 import type { GitHubProfile } from '@/services/github/schema'
@@ -20,7 +21,7 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
   )
 }
 
-export function ProfileCard({ profile }: { profile: GitHubProfile }) {
+export function ProfileCard({ profile, actions }: { profile: GitHubProfile; actions?: ReactNode }) {
   const website = toSafeWebUrl(profile.blog)
   const memberSince = profile.created_at ? new Date(profile.created_at).getFullYear() : null
 
@@ -65,14 +66,17 @@ export function ProfileCard({ profile }: { profile: GitHubProfile }) {
         {memberSince ? <Detail label="Joined">{memberSince}</Detail> : null}
       </ul>
 
-      <a
-        href={profile.html_url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-6 inline-flex h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
-      >
-        View on GitHub ↗
-      </a>
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <a
+          href={profile.html_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          View on GitHub ↗
+        </a>
+        {actions}
+      </div>
     </Card>
   )
 }

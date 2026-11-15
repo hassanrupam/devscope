@@ -137,3 +137,113 @@ describe('githubClient.searchUsersByPrefix', () => {
   })
 })
 
+
+describe('githubClient with the token proxy base URL', () => {
+  it('sends profile and search requests to the proxy, with only the Accept header', async () => {
+    const proxyBase = 'https://proj.supabase.co/functions/v1/github-proxy'
+    const fetchMock = vi.fn(async () => Response.json({ items: [] }))
+    const github = createGitHubClient(fetchMock as unknown as typeof fetch, proxyBase)
+
+    await github.searchUsersByPrefix('tor')
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url.startsWith(`${proxyBase}/search/users?`)).toBe(true)
+    expect(init.headers).toEqual({ Accept: 'application/vnd.github+json' })
+  })
+
+  it('treats a 404 without the proxy marker as an upstream problem, not "user not found"', async () => {
+    const fetchMock = vi.fn(async () => new Response('{"code":"NOT_FOUND"}', { status: 404 }))
+    const github = createGitHubClient(fetchMock as unknown as typeof fetch, 'https://p.test/github-proxy', true)
+    await expect(github.fetchProfile('octocat')).rejects.toMatchObject({ code: 'upstream' })
+  })
+
+  it('still maps a 404 coming from the proxy (GitHub said so) to not_found', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 404, headers: { 'x-devscope-proxy': '1' } }))
+    const github = createGitHubClient(fetchMock as unknown as typeof fetch, 'https://p.test/github-proxy', true)
+    await expect(github.fetchProfile('ghost')).rejects.toMatchObject({ code: 'not_found' })
+  })
+})
+
+
+describe('githubClient.fetchRepos', () => {
+  const repoItem = (id: number, extra: Record<string, unknown> = {}) => ({
+    id,
+    name: `repo-${id}`,
+    html_url: `https://github.com/octocat/repo-${id}`,
+    description: '  A repo  ',
+    language: 'TypeScript',
+    stargazers_count: 7,
+    forks_count: 2,
+    fork: false,
+    archived: false,
+    pushed_at: '2026-01-01T00:00:00Z',
+    owner: { login: 'octocat' },
+    ...extra,
+  })
+
+  it('requests the user\'s own repos, most recently pushed first, in one request', async () => {
+    const { github, fetchMock } = client(Response.json([repoItem(1)]))
+    await github.fetchRepos('octocat')
+
+    const url = new URL((fetchMock.mock.calls[0] as unknown as [string])[0])
+    expect(url.pathname).toBe('/users/octocat/repos')
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      per_page: '100',
+      sort: 'pushed',
+      direction: 'desc',
+      type: 'owner',
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps only the fields it uses and normalises text', async () => {
+    const { github } = client(Response.json([repoItem(1, { description: '   ', language: null })]))
+    const [repo] = await github.fetchRepos('octocat')
+    expect(repo).toEqual({
+      id: 1,
+      name: 'repo-1',
+      html_url: 'https://github.com/octocat/repo-1',
+      description: null,
+      language: null,
+      stargazers_count: 7,
+      forks_count: 2,
+      fork: false,
+      archived: false,
+      pushed_at: '2026-01-01T00:00:00Z',
+    })
+  })
+
+  it('truncates long descriptions to 200 characters', async () => {
+    const { github } = client(Response.json([repoItem(1, { description: 'x'.repeat(500) })]))
+    const [repo] = await github.fetchRepos('octocat')
+    expect(repo?.description).toHaveLength(200)
+  })
+
+  it('skips malformed repositories instead of failing the whole list', async () => {
+    const { github } = client(Response.json([repoItem(1), { id: 'nope' }, repoItem(3, { html_url: 'javascript:alert(1)' }), repoItem(4)]))
+    const repos = await github.fetchRepos('octocat')
+    expect(repos.map((r) => r.id)).toEqual([1, 4])
+  })
+
+  it('returns an empty list for a user without repositories', async () => {
+    const { github } = client(Response.json([]))
+    expect(await github.fetchRepos('newbie')).toEqual([])
+  })
+
+  it('maps 404 to not_found and rate limits to rate_limited', async () => {
+    await expect(client(new Response('{}', { status: 404 })).github.fetchRepos('ghost')).rejects.toMatchObject({ code: 'not_found' })
+    await expect(
+      client(new Response('{}', { status: 403, headers: { 'x-ratelimit-remaining': '0' } })).github.fetchRepos('a'),
+    ).rejects.toMatchObject({ code: 'rate_limited' })
+  })
+
+  it('rejects a non-array payload', async () => {
+    const { github } = client(Response.json({ message: 'weird' }))
+    await expect(github.fetchRepos('octocat')).rejects.toMatchObject({ code: 'upstream' })
+  })
+
+  it('treats a 404 without the proxy marker as a missing proxy, not "user not found"', async () => {
+    const fetchMock = vi.fn(async () => new Response('{"code":"NOT_FOUND"}', { status: 404 }))
+    const github = createGitHubClient(fetchMock as unknown as typeof fetch, 'https://p.test/github-proxy', true)
+    await expect(github.fetchRepos('octocat')).rejects.toMatchObject({ code: 'upstream' })
+  })
+})

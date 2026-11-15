@@ -1,4 +1,4 @@
--- DevScope: shared cache for "users whose login starts with <prefix>" searches.
+-- DevExplore: shared cache for "users whose login starts with <prefix>" searches.
 -- Same security model as the profile cache: RLS on, no policies, no table privileges for
 -- browser roles, and only narrow SECURITY DEFINER functions are exposed.
 -- Refresh locks reuse public.github_profile_refresh_locks with keys of the form 'search:<prefix>'

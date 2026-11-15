@@ -1,0 +1,7 @@
+# Minimal Supabase CLI config (only what `supabase functions deploy` needs).
+project_id = "devexplore"
+
+[functions.github-proxy]
+# Browser calls use Supabase's public key, which is not always a JWT, and the function does its own
+# allowlisting (see handler.ts), so the platform-level JWT check is turned off for this function.
+verify_jwt = false

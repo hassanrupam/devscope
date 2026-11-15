@@ -1,20 +1,33 @@
-import { config } from '@/config'
+import { config, isGitHubProxyEnabled } from '@/config'
 import { AppError } from '@/lib/errors'
-import { githubProfileSchema, searchResponseSchema, type GitHubProfile, type SearchUser } from './schema'
+import {
+  githubProfileSchema,
+  repoSchema,
+  searchResponseSchema,
+  type GitHubProfile,
+  type Repo,
+  type SearchUser,
+} from './schema'
 
 /** Max number of matching users returned (and cached) for one prefix search. */
 export const SEARCH_MAX_RESULTS = 12
 /** Fetch more than we show: GitHub matches anywhere in the login, we keep only prefix matches. */
 const SEARCH_FETCH_SIZE = 30
 
+/** Repositories fetched per user (one request). Users with more public repos are truncated. */
+export const REPOS_PER_USER = 100
+
 export interface GitHubClient {
   fetchProfile(username: string, signal?: AbortSignal): Promise<GitHubProfile>
+  /** The user's own public repositories (forks included, flagged), most recently pushed first. */
+  fetchRepos(username: string, signal?: AbortSignal): Promise<Repo[]>
   /** Users whose login starts with `prefix` (already normalised to lower-case). */
   searchUsersByPrefix(prefix: string, signal?: AbortSignal): Promise<SearchUser[]>
 }
 
 export type ProfileFetcher = Pick<GitHubClient, 'fetchProfile'>
 export type UserSearcher = Pick<GitHubClient, 'searchUsersByPrefix'>
+export type RepoFetcher = Pick<GitHubClient, 'fetchRepos'>
 
 function parseResetHeader(value: string | null): Date | undefined {
   const seconds = Number(value)
@@ -24,6 +37,7 @@ function parseResetHeader(value: string | null): Date | undefined {
 export function createGitHubClient(
   fetchImpl: typeof fetch = (...args) => fetch(...args),
   baseUrl: string = config.githubApiBase,
+  viaProxy: boolean = isGitHubProxyEnabled,
 ): GitHubClient {
   /** GET + status mapping + JSON parsing. Returns untrusted JSON; callers validate it. */
   async function getJson(path: string, signal?: AbortSignal, notFoundMessage?: string): Promise<unknown> {
@@ -41,7 +55,10 @@ export function createGitHubClient(
       })
     }
 
-    if (response.status === 404 && notFoundMessage) {
+    // Behind the proxy, a 404 without the proxy's marker header is the platform saying the function
+    // is missing (not deployed), which must not be reported as "user not found".
+    const proxyMissing = viaProxy && !response.headers.has('x-devscope-proxy')
+    if (response.status === 404 && notFoundMessage && !proxyMissing) {
       throw new AppError('not_found', notFoundMessage)
     }
 
@@ -49,7 +66,7 @@ export function createGitHubClient(
     if (response.status === 429 || (response.status === 403 && rateRemaining === '0')) {
       throw new AppError(
         'rate_limited',
-        'GitHub rate limit reached for your network. Please try again later.',
+        'GitHub rate limit reached. Please try again later.',
         { resetAt: parseResetHeader(response.headers.get('x-ratelimit-reset')) },
       )
     }
@@ -94,6 +111,22 @@ export function createGitHubClient(
       return parsed.data.items
         .filter((user) => user.login.toLowerCase().startsWith(prefix))
         .slice(0, SEARCH_MAX_RESULTS)
+    },
+
+    async fetchRepos(username, signal) {
+      const body = await getJson(
+        `/users/${encodeURIComponent(username)}/repos?per_page=${REPOS_PER_USER}&sort=pushed&direction=desc&type=owner`,
+        signal,
+        `No GitHub user named "${username}" was found.`,
+      )
+      if (!Array.isArray(body)) {
+        throw new AppError('upstream', 'GitHub returned unexpected repository data.')
+      }
+      // One malformed repository must not hide all the others: validate and keep the good ones.
+      return body.flatMap((item: unknown) => {
+        const parsed = repoSchema.safeParse(item)
+        return parsed.success ? [parsed.data] : []
+      })
     },
   }
 }
