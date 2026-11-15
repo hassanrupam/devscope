@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Card } from '@/components/ui/card'
+import { ExternalLinkIcon } from '@/components/ui/icons'
 import { formatCount, toSafeWebUrl } from '@/lib/utils'
 import type { GitHubProfile } from '@/services/github/schema'
 
@@ -71,9 +72,9 @@ export function ProfileCard({ profile, actions }: { profile: GitHubProfile; acti
           href={profile.html_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex h-10 items-center rounded-lg border border-slate-300 px-4 text-sm font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+          className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-medium hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
         >
-          View on GitHub ↗
+          View on GitHub <ExternalLinkIcon />
         </a>
         {actions}
       </div>

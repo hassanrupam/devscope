@@ -282,6 +282,25 @@ test('typing a prefix lists matching users, caches the list, and a tile opens th
   await second.context.close()
 })
 
+test('Explore search can clear its input separately from clearing the results', async ({ browser }) => {
+  const db = newDb()
+  const { page, context } = await newVisitor(browser, db)
+
+  await search(page, 'octo')
+  const results = page.getByTestId('user-list')
+  await expect(results).toBeVisible()
+
+  await page.getByRole('button', { name: 'Clear username' }).click()
+  await expect(page.getByLabel('GitHub username')).toHaveValue('')
+  await expect(results).toBeVisible()
+
+  await page.getByRole('button', { name: 'Clear results' }).click()
+  await expect(page.getByText('Enter a username above to see their public profile, repositories and matching users.')).toBeVisible()
+  await expect(results).toHaveCount(0)
+  await expect(page).not.toHaveURL(/[?&]u=/)
+  await context.close()
+})
+
 test('a full username still shows its profile and also lists users that start with it', async ({ browser }) => {
   const db = newDb()
   const { page, context } = await newVisitor(browser, db)
@@ -324,7 +343,11 @@ test('compare view lists users side by side and highlights the highest value in 
   const db = newDb()
   const { page, context } = await newVisitor(browser, db)
 
+  const main = page.locator('main')
+  const exploreWidth = await main.evaluate((element) => element.getBoundingClientRect().width)
   await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: /Compare/ }).click()
+  const compareWidth = await main.evaluate((element) => element.getBoundingClientRect().width)
+  expect(compareWidth).toBe(exploreWidth)
   await expect(page.getByText('Add at least two users to see them side by side.')).toBeVisible()
 
   const input = page.getByLabel('Add a GitHub username to compare')
@@ -365,8 +388,32 @@ test('compare view lists users side by side and highlights the highest value in 
   // The comparison is reflected in the URL so it can be shared.
   await expect(page).toHaveURL(/view=compare&users=octocat,octocatfan/)
 
-  await page.getByRole('button', { name: 'Remove octocatfan from comparison' }).click()
+  const removeOctocatfan = page.getByRole('button', { name: 'Remove octocatfan from comparison' })
+  await expect(removeOctocatfan.locator('svg')).toBeVisible()
+  await removeOctocatfan.click()
   await expect(page.getByText('Add one more user to start comparing.')).toBeVisible()
+  await context.close()
+})
+
+test('Compare can clear its input separately from clearing the comparison', async ({ browser }) => {
+  const db = newDb()
+  const { page, context } = await newVisitor(browser, db)
+
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: /Compare/ }).click()
+  const input = page.getByLabel('Add a GitHub username to compare')
+  await input.fill('octocat')
+  await page.getByRole('button', { name: 'Add user' }).click()
+  await expect(page.getByText('Add one more user to start comparing.')).toBeVisible()
+
+  await input.fill('octocatfan')
+  await page.getByRole('button', { name: 'Clear comparison username' }).click()
+  await expect(input).toHaveValue('')
+  await expect(page.getByText('Add one more user to start comparing.')).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Compare (1)' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Clear comparison' }).click()
+  await expect(page.getByText('Add at least two users to see them side by side.')).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Compare', exact: true })).toBeVisible()
   await context.close()
 })
 
@@ -382,7 +429,7 @@ test('a compare link restores the comparison, and "Add to compare" feeds it from
   await page.goto('/')
   await search(page, 'octocat')
   await expect(page.getByRole('heading', { name: 'The Octocat' })).toBeVisible()
-  await page.getByRole('button', { name: '+ Add to compare' }).click()
+  await page.getByRole('button', { name: 'Add to compare' }).click()
   await expect(page.getByRole('button', { name: /In comparison/ })).toBeVisible()
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Compare (1)' })).toBeVisible()
   await context.close()

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ArrowRightIcon, CheckIcon, CompareIcon, PlusIcon, SearchIcon } from '@/components/ui/icons'
 import { config } from '@/config'
 import { toAppError } from '@/lib/errors'
 import { cn } from '@/lib/utils'
@@ -22,7 +23,7 @@ function NavTab({ active, onClick, children }: { active: boolean; onClick: () =>
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+        'inline-flex w-36 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
         active
           ? 'bg-indigo-600 text-white'
           : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800',
@@ -58,6 +59,11 @@ export default function App() {
     setSelected(isValidUsername(text) ? text : null)
   }
 
+  function handleClearSearch() {
+    setQuery(null)
+    setSelected(null)
+  }
+
   const comparisonFull = compareUsers.length >= config.maxCompareUsers
   const isInComparison = (login: string) => compareUsers.includes(login.toLowerCase())
 
@@ -81,11 +87,15 @@ export default function App() {
     setCompareUsers(compareUsers.filter((u) => u !== username))
   }
 
+  function clearComparison() {
+    setCompareUsers([])
+  }
+
   const profileError = profile.error ? toAppError(profile.error) : null
   const shownLogin = profile.data?.profile.login ?? null
 
   return (
-    <div className={cn('mx-auto flex min-h-screen w-full flex-col px-4 py-10 sm:py-16', view === 'compare' ? 'max-w-5xl' : 'max-w-2xl')}>
+    <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-10 sm:py-16">
       <header className="mb-8 text-center">
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
           Dev<span className="text-indigo-600 dark:text-indigo-400">Explore</span>
@@ -93,9 +103,11 @@ export default function App() {
         <p className="mt-2 text-slate-600 dark:text-slate-400">Explore and compare public GitHub developers.</p>
         <nav aria-label="Main" className="mt-5 inline-flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-900">
           <NavTab active={view === 'explore'} onClick={() => setView('explore')}>
+            <SearchIcon />
             Explore
           </NavTab>
           <NavTab active={view === 'compare'} onClick={() => setView('compare')}>
+            <CompareIcon />
             Compare{compareUsers.length > 0 ? ` (${compareUsers.length})` : ''}
           </NavTab>
         </nav>
@@ -103,10 +115,16 @@ export default function App() {
 
       <main className="flex-1 space-y-8">
         {view === 'compare' ? (
-          <CompareView users={compareUsers} onAdd={addToComparison} onRemove={removeFromComparison} />
+          <CompareView users={compareUsers} onAdd={addToComparison} onClear={clearComparison} onRemove={removeFromComparison} />
         ) : (
           <>
-            <SearchForm initialValue={initial.query ?? ''} isLoading={profile.isFetching} onSearch={handleSearch} />
+            <SearchForm
+              initialValue={initial.query ?? ''}
+              hasSearch={query !== null}
+              isLoading={profile.isFetching}
+              onSearch={handleSearch}
+              onClear={handleClearSearch}
+            />
 
             {query === null ? (
               <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
@@ -133,7 +151,9 @@ export default function App() {
                       actions={
                         shownLogin && isInComparison(shownLogin) ? (
                           <Button type="button" onClick={() => setView('compare')} className="h-10 bg-emerald-600 hover:bg-emerald-500">
-                            ✓ In comparison · View
+                            <CheckIcon />
+                            In comparison
+                            <ArrowRightIcon />
                           </Button>
                         ) : (
                           <Button
@@ -142,7 +162,17 @@ export default function App() {
                             disabled={comparisonFull}
                             className="h-10"
                           >
-                            {comparisonFull ? `Comparison full (${config.maxCompareUsers})` : '+ Add to compare'}
+                            {comparisonFull ? (
+                              <>
+                                <CompareIcon />
+                                {`Comparison full (${config.maxCompareUsers})`}
+                              </>
+                            ) : (
+                              <>
+                                <PlusIcon />
+                                Add to compare
+                              </>
+                            )}
                           </Button>
                         )
                       }

@@ -1,4 +1,5 @@
 import { cn, formatRelativeTime } from '@/lib/utils'
+import { ExternalLinkIcon, XIcon } from '@/components/ui/icons'
 import { LanguageBar } from '@/features/repos/components/LanguageBar'
 import { bestIndexes, METRICS, type ComparisonColumn, type MetricDef } from '../metrics'
 
@@ -11,36 +12,40 @@ function HeaderCell({ column, onRemove }: { column: ComparisonColumn; onRemove: 
   const { profile, profileState, profileError, username } = column
   return (
     <th scope="col" className={headCell}>
-      {profileState === 'loading' ? (
-        <div className="animate-pulse space-y-2" aria-busy="true" aria-label={`Loading ${username}`}>
-          <div className="size-12 rounded-full bg-slate-200 dark:bg-slate-800" />
-          <div className="h-4 w-24 rounded bg-slate-200 dark:bg-slate-800" />
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          {profileState === 'loading' ? (
+            <div className="animate-pulse space-y-2" aria-busy="true" aria-label={`Loading ${username}`}>
+              <div className="size-12 rounded-full bg-slate-200 dark:bg-slate-800" />
+              <div className="h-4 w-24 rounded bg-slate-200 dark:bg-slate-800" />
+            </div>
+          ) : profile ? (
+            <div className="flex items-start gap-3">
+              <img src={profile.avatar_url} alt="" width={48} height={48} className="size-12 shrink-0 rounded-full border border-slate-200 object-cover dark:border-slate-700" />
+              <div className="min-w-0">
+                <p className="break-words font-semibold text-slate-900 dark:text-slate-100">{profile.name ?? profile.login}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">@{profile.login}</p>
+                <a href={profile.html_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline dark:text-indigo-400">
+                  GitHub <ExternalLinkIcon />
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <p className="font-semibold text-slate-900 dark:text-slate-100">@{username}</p>
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{profileError?.message ?? 'Could not load this user.'}</p>
+            </div>
+          )}
         </div>
-      ) : profile ? (
-        <div className="flex items-start gap-3">
-          <img src={profile.avatar_url} alt="" width={48} height={48} className="size-12 shrink-0 rounded-full border border-slate-200 object-cover dark:border-slate-700" />
-          <div className="min-w-0">
-            <p className="break-words font-semibold text-slate-900 dark:text-slate-100">{profile.name ?? profile.login}</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">@{profile.login}</p>
-            <a href={profile.html_url} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 hover:underline dark:text-indigo-400">
-              GitHub ↗
-            </a>
-          </div>
-        </div>
-      ) : (
-        <div>
-          <p className="font-semibold text-slate-900 dark:text-slate-100">@{username}</p>
-          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{profileError?.message ?? 'Could not load this user.'}</p>
-        </div>
-      )}
-      <button
-        type="button"
-        onClick={() => onRemove(username)}
-        aria-label={`Remove ${username} from comparison`}
-        className="mt-2 rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
-      >
-        Remove
-      </button>
+        <button
+          type="button"
+          onClick={() => onRemove(username)}
+          aria-label={`Remove ${username} from comparison`}
+          className="mt-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+        >
+          <XIcon />
+        </button>
+      </div>
     </th>
   )
 }

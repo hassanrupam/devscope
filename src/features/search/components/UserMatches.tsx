@@ -1,5 +1,6 @@
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { CheckIcon, ExternalLinkIcon, PlusIcon } from '@/components/ui/icons'
 import { toAppError } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { ErrorPanel } from '@/features/profile/components/ErrorPanel'
@@ -65,9 +66,9 @@ function UserTile({ user, selected, onSelect, compare }: UserTileProps) {
           target="_blank"
           rel="noopener noreferrer"
           aria-label={`Open ${user.login} on GitHub`}
-          className="shrink-0 rounded-md px-2 py-1 text-xs text-indigo-600 hover:underline dark:text-indigo-400"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-indigo-600 hover:underline dark:text-indigo-400"
         >
-          GitHub ↗
+          GitHub <ExternalLinkIcon />
         </a>
         {compare ? (
           <button
@@ -75,9 +76,19 @@ function UserTile({ user, selected, onSelect, compare }: UserTileProps) {
             onClick={compare.onCompare}
             disabled={compare.added || compare.full}
             aria-label={compare.added ? `${user.login} is in the comparison` : `Add ${user.login} to compare`}
-            className="shrink-0 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800"
+            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800"
           >
-            {compare.added ? '✓ Added' : '+ Compare'}
+            {compare.added ? (
+              <>
+                <CheckIcon />
+                Added
+              </>
+            ) : (
+              <>
+                <PlusIcon />
+                Compare
+              </>
+            )}
           </button>
         ) : null}
       </div>
