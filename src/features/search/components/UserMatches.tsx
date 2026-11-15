@@ -34,10 +34,10 @@ function UserTile({ user, selected, onSelect, compare }: UserTileProps) {
     <li>
       <div
         className={cn(
-          'flex items-center gap-3 rounded-xl border p-2 pr-3 transition-colors',
+          'flex items-center gap-3 rounded-xl border p-2 pr-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
           selected
-            ? 'border-indigo-400 bg-indigo-50 dark:border-indigo-500 dark:bg-indigo-950/40'
-            : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:bg-slate-800/60',
+            ? 'border-indigo-300 bg-gradient-to-br from-indigo-50 to-white shadow-indigo-950/[0.06] dark:border-indigo-500/70 dark:from-indigo-950/60 dark:to-slate-900'
+            : 'border-slate-200/80 bg-white/75 hover:border-indigo-200 hover:bg-white dark:border-slate-800 dark:bg-slate-900/70 dark:hover:border-indigo-900 dark:hover:bg-slate-900',
         )}
       >
         <button
@@ -76,7 +76,7 @@ function UserTile({ user, selected, onSelect, compare }: UserTileProps) {
             onClick={compare.onCompare}
             disabled={compare.added || compare.full}
             aria-label={compare.added ? `${user.login} is in the comparison` : `Add ${user.login} to compare`}
-            className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:hover:bg-slate-800"
+            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-300/80 bg-white/60 px-2 py-1 text-xs font-medium shadow-sm transition-colors hover:border-indigo-300 hover:bg-indigo-50/60 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/60 dark:hover:border-indigo-800 dark:hover:bg-indigo-950/30"
           >
             {compare.added ? (
               <>

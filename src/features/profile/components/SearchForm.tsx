@@ -57,7 +57,7 @@ export function SearchForm({ initialValue = '', hasSearch, isLoading, onSearch, 
             spellCheck={false}
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? 'username-error' : 'username-hint'}
-            className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 pr-11 text-base text-slate-900 placeholder:text-slate-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:px-4"
+            className="h-11 w-full rounded-xl border border-slate-300/80 bg-white/80 px-3 pr-11 text-base text-slate-900 shadow-sm shadow-slate-900/[0.03] placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 sm:px-4"
           />
           {value ? (
             <button
@@ -88,7 +88,7 @@ export function SearchForm({ initialValue = '', hasSearch, isLoading, onSearch, 
             <Button
               type="button"
               onClick={clearSearch}
-              className="bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+              className="border-slate-200 bg-slate-100 text-slate-700 shadow-none hover:bg-slate-200 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
             >
               <XIcon />
               Clear results

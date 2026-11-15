@@ -64,7 +64,7 @@ export function CompareView({ users, onAdd, onClear, onRemove }: CompareViewProp
               spellCheck={false}
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? 'compare-error' : 'compare-hint'}
-              className="h-11 w-full rounded-lg border border-slate-300 bg-white px-4 pr-11 text-base text-slate-900 placeholder:text-slate-400 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+              className="h-11 w-full rounded-xl border border-slate-300/80 bg-white/80 px-3 pr-11 text-base text-slate-900 shadow-sm shadow-slate-900/[0.03] placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100 sm:px-4"
             />
             {value ? (
               <button
@@ -86,7 +86,7 @@ export function CompareView({ users, onAdd, onClear, onRemove }: CompareViewProp
               <Button
                 type="button"
                 onClick={clearComparison}
-                className="bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70"
+                className="border-red-200 bg-red-50 text-red-700 shadow-none hover:bg-red-100 hover:shadow-sm dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/70"
               >
                 <TrashIcon />
                 Clear comparison
@@ -105,7 +105,7 @@ export function CompareView({ users, onAdd, onClear, onRemove }: CompareViewProp
       </form>
 
       {users.length < 2 ? (
-        <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+        <p className="rounded-2xl border border-dashed border-slate-300/80 bg-white/45 p-6 text-center text-sm text-slate-600 shadow-sm backdrop-blur-sm dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-400 sm:p-8">
           {users.length === 0
             ? 'Add at least two users to see them side by side.'
             : `Added @${users[0]}. Add one more user to start comparing.`}

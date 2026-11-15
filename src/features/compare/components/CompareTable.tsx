@@ -6,7 +6,7 @@ import { bestIndexes, METRICS, type ComparisonColumn, type MetricDef } from '../
 const numberFormat = new Intl.NumberFormat('en')
 
 const headCell = 'px-4 py-3 text-left align-top font-normal'
-const rowHeader = 'sticky left-0 z-10 bg-white px-4 py-3 text-left text-sm font-medium text-slate-600 dark:bg-slate-900 dark:text-slate-300'
+const rowHeader = 'sticky left-0 z-10 bg-white/95 px-4 py-3 text-left text-sm font-medium text-slate-600 dark:bg-slate-900/95 dark:text-slate-300'
 
 function HeaderCell({ column, onRemove }: { column: ComparisonColumn; onRemove: (username: string) => void }) {
   const { profile, profileState, profileError, username } = column
@@ -41,7 +41,7 @@ function HeaderCell({ column, onRemove }: { column: ComparisonColumn; onRemove: 
           type="button"
           onClick={() => onRemove(username)}
           aria-label={`Remove ${username} from comparison`}
-          className="mt-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+          className="mt-1 inline-flex size-8 shrink-0 items-center justify-center rounded-full text-red-600 transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 dark:text-red-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
         >
           <XIcon />
         </button>
@@ -72,7 +72,7 @@ function MetricRow({ metric, columns }: { metric: MetricDef; columns: Comparison
   const best = metric.higherIsBetter ? bestIndexes(values.map((v) => v.value)) : []
 
   return (
-    <tr className="border-t border-slate-100 dark:border-slate-800" data-testid={`metric-${metric.id}`}>
+    <tr className="border-t border-slate-100 transition-colors hover:bg-indigo-50/35 dark:border-slate-800 dark:hover:bg-indigo-950/20" data-testid={`metric-${metric.id}`}>
       <th scope="row" className={rowHeader}>
         {metric.label}
       </th>
@@ -100,13 +100,13 @@ export function CompareTable({ columns, onRemove }: { columns: ComparisonColumn[
         role="region"
         aria-label="Comparison table; scroll horizontally to see all users"
         tabIndex={0}
-        className="overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-200 bg-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 dark:border-slate-800 dark:bg-slate-900"
+        className="overflow-x-auto overscroll-x-contain rounded-2xl border border-slate-200/80 bg-white/80 shadow-xl shadow-slate-900/[0.05] ring-1 ring-white/60 backdrop-blur-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 dark:border-slate-800/80 dark:bg-slate-900/70 dark:shadow-black/25 dark:ring-white/[0.04]"
       >
         <table className="w-full min-w-[36rem] border-collapse" data-testid="compare-table">
           <caption className="sr-only">Side-by-side comparison of GitHub users</caption>
           <thead>
-            <tr>
-              <th scope="col" className={cn(headCell, 'sticky left-0 z-10 bg-white text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900 dark:text-slate-400')}>
+            <tr className="bg-slate-50/70 dark:bg-slate-950/50">
+              <th scope="col" className={cn(headCell, 'sticky left-0 z-10 bg-slate-50/95 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-900/95 dark:text-slate-400')}>
                 Metric
               </th>
               {columns.map((column) => (
@@ -119,7 +119,7 @@ export function CompareTable({ columns, onRemove }: { columns: ComparisonColumn[
               <MetricRow key={metric.id} metric={metric} columns={columns} />
             ))}
 
-            <tr className="border-t border-slate-100 dark:border-slate-800" data-testid="metric-top-languages">
+            <tr className="border-t border-slate-100 transition-colors hover:bg-indigo-50/35 dark:border-slate-800 dark:hover:bg-indigo-950/20" data-testid="metric-top-languages">
               <th scope="row" className={rowHeader}>
                 Top languages
               </th>
@@ -136,7 +136,7 @@ export function CompareTable({ columns, onRemove }: { columns: ComparisonColumn[
               ))}
             </tr>
 
-            <tr className="border-t border-slate-100 dark:border-slate-800" data-testid="metric-joined">
+            <tr className="border-t border-slate-100 transition-colors hover:bg-indigo-50/35 dark:border-slate-800 dark:hover:bg-indigo-950/20" data-testid="metric-joined">
               <th scope="row" className={rowHeader}>
                 Member since
               </th>
@@ -145,7 +145,7 @@ export function CompareTable({ columns, onRemove }: { columns: ComparisonColumn[
               ))}
             </tr>
 
-            <tr className="border-t border-slate-100 dark:border-slate-800" data-testid="metric-last-pushed">
+            <tr className="border-t border-slate-100 transition-colors hover:bg-indigo-50/35 dark:border-slate-800 dark:hover:bg-indigo-950/20" data-testid="metric-last-pushed">
               <th scope="row" className={rowHeader}>
                 Last pushed
               </th>
@@ -159,7 +159,7 @@ export function CompareTable({ columns, onRemove }: { columns: ComparisonColumn[
         </table>
       </div>
 
-      <p className="text-xs text-slate-500 dark:text-slate-400">
+      <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
         ▲ marks the highest value in a row. Repository figures exclude forks and count each repository's primary language.
         {anyTruncated ? ' For users with more than 100 public repositories they cover the 100 most recently pushed.' : ''}
       </p>

@@ -9,16 +9,16 @@ import { LanguageBar } from './LanguageBar'
 
 function Tile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-4 py-3 text-center dark:bg-slate-800/60">
-      <dd className="text-xl font-semibold tabular-nums">{formatCount(value)}</dd>
-      <dt className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</dt>
+    <div className="rounded-xl border border-slate-200/70 bg-gradient-to-br from-white/90 to-indigo-50/60 px-3 py-3 text-center shadow-inner shadow-slate-900/[0.02] sm:px-4 dark:border-slate-700/70 dark:from-slate-800/90 dark:to-indigo-950/30">
+      <dd className="text-lg font-semibold tabular-nums sm:text-xl">{formatCount(value)}</dd>
+      <dt className="text-[0.65rem] font-medium uppercase tracking-wide text-slate-500 sm:text-xs dark:text-slate-400">{label}</dt>
     </div>
   )
 }
 
 function RepoRow({ repo }: { repo: Repo }) {
   return (
-    <li className="rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+    <li className="rounded-xl border border-slate-200/80 bg-white/55 p-3 shadow-sm transition-colors hover:border-indigo-200 hover:bg-indigo-50/40 dark:border-slate-800 dark:bg-slate-950/25 dark:hover:border-indigo-900 dark:hover:bg-indigo-950/20">
       <div className="flex items-start justify-between gap-3">
         <a
           href={repo.html_url}

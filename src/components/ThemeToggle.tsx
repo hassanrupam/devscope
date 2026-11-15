@@ -37,7 +37,7 @@ export function ThemeToggle() {
       aria-label={`Switch to ${nextTheme} theme`}
       aria-pressed={theme === 'dark'}
       title={`Switch to ${nextTheme} theme`}
-      className="absolute top-1/2 right-0 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 sm:size-10"
+      className="absolute top-1/2 right-0 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-xl border border-white/70 bg-white/60 text-slate-600 shadow-md shadow-slate-900/[0.05] backdrop-blur-lg transition-all hover:bg-white hover:text-indigo-600 hover:shadow-lg dark:border-slate-700/80 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-indigo-300 sm:size-10"
     >
       {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
     </button>

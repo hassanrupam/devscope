@@ -26,13 +26,13 @@ export function ResultStatus({ result, testId = 'result-status' }: ResultStatusP
       </p>
 
       {stale ? (
-        <p role="status" className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
+        <p role="status" className="rounded-xl border border-amber-200/80 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 shadow-sm dark:border-amber-900/80 dark:bg-amber-950/50 dark:text-amber-200">
           GitHub could not be reached, so this saved copy is shown. It may be out of date.
         </p>
       ) : null}
 
       {cacheStatus !== 'ok' ? (
-        <p role="status" className="rounded-lg bg-slate-100 px-4 py-3 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+        <p role="status" className="rounded-xl border border-slate-200/80 bg-white/65 px-4 py-3 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-900/65 dark:text-slate-300">
           {cacheStatus === 'unavailable'
             ? 'The shared cache is unavailable right now, so this was loaded directly from GitHub.'
             : 'This could not be saved to the shared cache, so the next visitor may need to reload it.'}

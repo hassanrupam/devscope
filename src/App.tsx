@@ -26,8 +26,8 @@ function NavTab({ active, onClick, children }: { active: boolean; onClick: () =>
       className={cn(
         'inline-flex w-32 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:w-36 sm:px-4',
         active
-          ? 'bg-indigo-600 text-white'
-          : 'text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800',
+          ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/15'
+          : 'text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-white',
       )}
     >
       {children}
@@ -97,7 +97,15 @@ export default function App() {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col px-4 py-6 sm:px-6 sm:py-10 lg:px-8 xl:px-10 2xl:px-12">
-      <header className="mb-6 text-center sm:mb-8">
+      <header className="relative isolate mb-6 text-center sm:mb-8">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 -top-4 -z-10 h-48 w-11/12 max-w-4xl -translate-x-1/2 rounded-full bg-indigo-400/20 blur-3xl dark:bg-indigo-500/15"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute left-1/2 top-8 -z-10 h-32 w-2/3 max-w-xl -translate-x-1/2 rounded-full bg-sky-300/20 blur-3xl dark:bg-violet-400/10"
+        />
         <div className="relative flex items-center justify-center">
           <h1 className="text-2xl font-bold tracking-tight sm:text-4xl 2xl:text-5xl">
             Dev<span className="text-indigo-600 dark:text-indigo-400">Explore</span>
@@ -105,7 +113,7 @@ export default function App() {
           <ThemeToggle />
         </div>
         <p className="mt-2 text-slate-600 dark:text-slate-400">Explore and compare public GitHub developers.</p>
-        <nav aria-label="Main" className="mt-5 inline-flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-900">
+        <nav aria-label="Main" className="mt-5 inline-flex gap-1 rounded-2xl border border-white/70 bg-white/60 p-1.5 shadow-lg shadow-slate-900/[0.06] backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-900/60 dark:shadow-black/20">
           <NavTab active={view === 'explore'} onClick={() => setView('explore')}>
             <SearchIcon />
             Explore
@@ -131,7 +139,7 @@ export default function App() {
             />
 
             {query === null ? (
-              <p className="rounded-2xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400 sm:p-8">
+              <p className="rounded-2xl border border-dashed border-slate-300/80 bg-white/45 p-6 text-center text-sm text-slate-600 shadow-sm backdrop-blur-sm dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-400 sm:p-8">
                 Enter a username above to see their public profile, repositories and matching users.
               </p>
             ) : null}
@@ -154,7 +162,7 @@ export default function App() {
                       profile={profile.data.profile}
                       actions={
                         shownLogin && isInComparison(shownLogin) ? (
-                          <Button type="button" onClick={() => setView('compare')} className="h-10 bg-emerald-600 hover:bg-emerald-500">
+                          <Button type="button" onClick={() => setView('compare')} className="h-10 border-emerald-500/30 bg-emerald-600 hover:bg-emerald-500">
                             <CheckIcon />
                             In comparison
                             <ArrowRightIcon />

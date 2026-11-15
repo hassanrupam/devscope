@@ -11,6 +11,14 @@
   body {
     @apply bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
     font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-image:
+      radial-gradient(ellipse 70rem 34rem at 8% -10%, rgb(99 102 241 / 0.08), transparent 68%),
+      radial-gradient(ellipse 56rem 30rem at 92% 8%, rgb(14 165 233 / 0.06), transparent 68%);
+  }
+  html.dark body {
+    background-image:
+      radial-gradient(ellipse 70rem 34rem at 8% -10%, rgb(99 102 241 / 0.16), transparent 68%),
+      radial-gradient(ellipse 56rem 30rem at 92% 8%, rgb(14 165 233 / 0.09), transparent 68%);
   }
   :focus-visible {
     @apply outline-2 outline-offset-2 outline-indigo-500;
