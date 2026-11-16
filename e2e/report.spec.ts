@@ -33,7 +33,7 @@ async function mock(page: Page, cached: { report?: unknown } = {}) {
   return calls
 }
 
-test('profile CTA opens the full report with every section, and Back returns to the profile', async ({ page }) => {
+test('profile CTA opens the full report with every section, and Back returns to the profile', { tag: '@proxy' }, async ({ page }) => {
   const calls = await mock(page)
   await page.goto('/?u=octocat')
   await page.getByTestId('open-report').click()
@@ -56,14 +56,14 @@ test('profile CTA opens the full report with every section, and Back returns to 
   await expect(page.getByTestId('report-page')).toBeVisible()
 })
 
-test('a cached report is used without asking GitHub again', async ({ page }) => {
+test('a cached report is used without asking GitHub again', { tag: '@proxy' }, async ({ page }) => {
   const calls = await mock(page, { report })
   await page.goto('/?view=report&report=octocat')
   await expect(page.getByTestId('heatmap-card').getByRole('img').first()).toBeVisible()
   expect(calls.report).toBe(0)
 })
 
-test('shows a friendly message when the report cannot be built, while profile sections still render', async ({ page }) => {
+test('shows a friendly message when the report cannot be built, while profile sections still render', { tag: '@proxy' }, async ({ page }) => {
   await mock(page)
   await page.route('http://127.0.0.1:54321/functions/v1/github-proxy/users/octocat/report', (r) =>
     r.fulfill({ status: 500, headers: { 'access-control-allow-origin': '*', 'x-devscope-proxy': '1' }, json: {} }),

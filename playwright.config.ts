@@ -12,8 +12,10 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${PORT}`, trace: 'retain-on-failure' },
   projects: [
     {
-      name: 'report',
-      testMatch: /report\.spec\.ts/,
+      name: 'proxy',
+      testMatch: /(report|profile)\.spec\.ts/,
+      // The report and the private rate-limit dashboard both need the GitHub proxy enabled.
+      grep: /@proxy/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: `http://localhost:${REPORT_PORT}`,
@@ -22,7 +24,7 @@ export default defineConfig({
     },
     {
       name: 'chromium',
-      testIgnore: /report\.spec\.ts/,
+      grepInvert: /@proxy/,
       use: {
         ...devices['Desktop Chrome'],
         // Optional: set PLAYWRIGHT_CHROME_PATH to use an already-installed Chrome.

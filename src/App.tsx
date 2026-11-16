@@ -21,6 +21,12 @@ import { UserMatches } from '@/features/search/components/UserMatches'
 // The report pulls in charting/animation libraries, so it is only downloaded when someone opens it.
 const ReportPage = lazy(() => import('@/features/report/components/ReportPage').then((m) => ({ default: m.ReportPage })))
 
+const RateLimitDashboard = lazy(() =>
+  import('@/features/rateLimit/components/RateLimitDashboard').then((module) => ({
+    default: module.RateLimitDashboard,
+  })),
+)
+
 function NavTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
@@ -40,6 +46,17 @@ function NavTab({ active, onClick, children }: { active: boolean; onClick: () =>
 }
 
 export default function App() {
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+  return pathname === '/rate-limit' ? (
+    <Suspense fallback={<div role="status" className="p-8 text-center text-sm text-slate-500">Loading analytics…</div>}>
+      <RateLimitDashboard />
+    </Suspense>
+  ) : (
+    <ExploreApp />
+  )
+}
+
+function ExploreApp() {
   const [initial] = useState(() => parseUrlState(window.location.search))
   const [view, setView] = useState<View>(initial.view)
   // `query` drives the list of matching users; `selected` drives the full profile.
