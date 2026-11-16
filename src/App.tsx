@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ArrowRightIcon, CheckIcon, CompareIcon, PlusIcon, SearchIcon } from '@/components/ui/icons'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -16,6 +16,12 @@ import { SearchForm } from '@/features/profile/components/SearchForm'
 import { useProfile } from '@/features/profile/useProfile'
 import { RepoDetails } from '@/features/repos/components/RepoDetails'
 import { UserMatches } from '@/features/search/components/UserMatches'
+
+const RateLimitDashboard = lazy(() =>
+  import('@/features/rateLimit/components/RateLimitDashboard').then((module) => ({
+    default: module.RateLimitDashboard,
+  })),
+)
 
 function NavTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -36,6 +42,17 @@ function NavTab({ active, onClick, children }: { active: boolean; onClick: () =>
 }
 
 export default function App() {
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+  return pathname === '/rate-limit' ? (
+    <Suspense fallback={<div role="status" className="p-8 text-center text-sm text-slate-500">Loading analytics…</div>}>
+      <RateLimitDashboard />
+    </Suspense>
+  ) : (
+    <ExploreApp />
+  )
+}
+
+function ExploreApp() {
   const [initial] = useState(() => parseUrlState(window.location.search))
   const [view, setView] = useState<View>(initial.view)
   // `query` drives the list of matching users; `selected` drives the full profile.

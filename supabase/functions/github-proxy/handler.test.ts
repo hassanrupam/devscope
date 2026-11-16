@@ -78,6 +78,170 @@ describe('github-proxy handler', () => {
     })
   })
 
+  describe('private rate-limit endpoint', () => {
+    const env = {
+      githubToken: TOKEN,
+      rateLimitUsername: 'dashboard',
+      rateLimitPassword: 'local-secret',
+      supabaseUrl: 'https://proj.supabase.co',
+      supabaseServiceRoleKey: 'service-role-secret',
+    }
+    const authorization = `Basic ${btoa('dashboard:local-secret')}`
+
+    it('exchanges valid credentials for an expiring dashboard session', async () => {
+      const { call, fetchMock } = setup(env)
+      const response = await call('/rate_limit/session', { method: 'POST', headers: { authorization } })
+      const session = await response.json() as { token: string; expires_at: string }
+
+      expect(response.status).toBe(200)
+      expect(session.token).toContain('.')
+      expect(Date.parse(session.expires_at) - Date.now()).toBeGreaterThan(11 * 60 * 60 * 1000)
+      expect(JSON.stringify(session)).not.toContain('local-secret')
+      expect(fetchMock).not.toHaveBeenCalled()
+
+      const protectedResponse = await call('/rate_limit', {
+        headers: { authorization: `Bearer ${session.token}` },
+      })
+      expect(protectedResponse.status).toBe(200)
+      expect(fetchMock).toHaveBeenCalledOnce()
+    })
+
+    it('rejects a tampered dashboard session before calling GitHub', async () => {
+      const { call, fetchMock } = setup(env)
+      const response = await call('/rate_limit', {
+        headers: { authorization: 'Bearer eyJzdWIiOiJkYXNoYm9hcmQifQ.invalid' },
+      })
+
+      expect(response.status).toBe(401)
+      expect(response.headers.get('x-devscope-rate-limit-error')).toBe('unauthorized')
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('requires dashboard credentials before making an upstream request', async () => {
+      const { call, fetchMock } = setup(env)
+      const response = await call('/rate_limit')
+
+      expect(response.status).toBe(401)
+      expect(response.headers.get('www-authenticate')).toContain('Basic')
+      expect(response.headers.get('x-devscope-rate-limit-error')).toBe('unauthorized')
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('does not forward rate-limit requests with incorrect credentials', async () => {
+      const { call, fetchMock } = setup(env)
+      const response = await call('/rate_limit', { headers: { authorization: `Basic ${btoa('dashboard:wrong')}` } })
+
+      expect(response.status).toBe(401)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('fails closed when dashboard credentials are not configured', async () => {
+      const { call, fetchMock } = setup({ githubToken: TOKEN })
+      const response = await call('/rate_limit', { headers: { authorization } })
+
+      expect(response.status).toBe(503)
+      expect(response.headers.get('x-devscope-rate-limit-error')).toBe('not_configured')
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('fetches only GitHub rate_limit and keeps the token server-side', async () => {
+      const body = {
+        resources: { core: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 } },
+        rate: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 },
+      }
+      const { call, fetchMock } = setup(env, upstreamResponse(body))
+      const response = await call('/rate_limit', { headers: { authorization } })
+      const [url, init] = upstreamCall(fetchMock)
+
+      expect(url).toBe('https://api.github.com/rate_limit')
+      expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`)
+      expect(response.status).toBe(200)
+      const responseBody = await response.text()
+      expect(JSON.parse(responseBody)).toEqual(body)
+      expect(responseBody).not.toContain(TOKEN)
+    })
+
+    it('allows the browser to send Basic credentials in CORS preflight', async () => {
+      const { call } = setup({})
+      const response = await call('/rate_limit', {
+        method: 'OPTIONS',
+        headers: { 'access-control-request-headers': 'authorization' },
+      })
+
+      expect(response.status).toBe(204)
+      expect(response.headers.get('access-control-allow-headers')).toContain('authorization')
+    })
+
+    it('stores a half-hour snapshot and removes records older than ten days', async () => {
+      const body = {
+        resources: { core: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 } },
+        rate: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 },
+      }
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === 'https://api.github.com/rate_limit') return upstreamResponse(body)
+        if (init?.method === 'POST') return new Response(null, { status: 201 })
+        if (init?.method === 'DELETE') return new Response(null, { status: 204 })
+        throw new Error(`Unexpected request: ${String(input)}`)
+      })
+      const response = await handleRequest(
+        new Request(`${BASE}/rate_limit/snapshot`, { method: 'POST', headers: { authorization } }),
+        env,
+        fetchMock as unknown as typeof fetch,
+      )
+
+      expect(response.status).toBe(200)
+      const githubRequest = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit]
+      expect(String(githubRequest[0])).toBe('https://api.github.com/rate_limit')
+      expect((githubRequest[1].headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`)
+
+      const insert = fetchMock.mock.calls[1] as unknown as [RequestInfo | URL, RequestInit]
+      expect(String(insert[0])).toContain('/rest/v1/rate_limit_snapshots?on_conflict=captured_at')
+      expect((insert[1].headers as Headers).get('authorization')).toBe('Bearer service-role-secret')
+      expect(JSON.parse(String(insert[1].body))[0].payload).toEqual(body)
+      const capturedAt = JSON.parse(String(insert[1].body))[0].captured_at
+      expect(Date.parse(capturedAt) % (30 * 60 * 1000)).toBe(0)
+
+      const prune = fetchMock.mock.calls[2] as unknown as [RequestInfo | URL, RequestInit]
+      expect(prune[1].method).toBe('DELETE')
+      expect(String(prune[0])).toContain('captured_at=lt.')
+    })
+
+    it('requires dashboard credentials before a scheduled snapshot can make requests', async () => {
+      const { call, fetchMock } = setup(env)
+      const response = await call('/rate_limit/snapshot', { method: 'POST' })
+
+      expect(response.status).toBe(401)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('returns only the last ten days of authenticated snapshot history', async () => {
+      const snapshots = [{
+        captured_at: '2026-11-16T12:30:00+00:00',
+        payload: {
+          resources: { core: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 } },
+          rate: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 },
+        },
+      }]
+      const fetchMock = vi.fn(async () => new Response(JSON.stringify(snapshots), { status: 200 }))
+      const response = await handleRequest(
+        new Request(`${BASE}/rate_limit/history`, { headers: { authorization } }),
+        env,
+        fetchMock as unknown as typeof fetch,
+      )
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual(snapshots)
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+      const query = new URL(url).searchParams
+      expect(new URL(url).pathname).toBe('/rest/v1/rate_limit_snapshots')
+      expect(query.get('select')).toBe('captured_at,payload')
+      expect(query.get('order')).toBe('captured_at.asc')
+      expect(query.get('limit')).toBe('480')
+      expect(query.get('captured_at')).toMatch(/^gte\./)
+      expect((init.headers as Headers).get('authorization')).toBe('Bearer service-role-secret')
+    })
+  })
+
   it.each([
     ['/users/bad name', 400],
     ['/users/-leading', 400],

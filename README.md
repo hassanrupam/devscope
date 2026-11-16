@@ -12,7 +12,7 @@ Static Vite + React + TypeScript app on free tiers. There is no application serv
 
 ## Stack
 
-TypeScript · React · Vite · Tailwind CSS v4 · TanStack Query · Zod · Supabase (PostgreSQL + JS client) · Vitest · Playwright · Vercel Hobby.
+TypeScript · React · Vite · Tailwind CSS v4 · Recharts · TanStack Query · Zod · Supabase (PostgreSQL + JS client) · Vitest · Playwright · Vercel Hobby.
 
 UI primitives (`Button`, `Card`, `Badge`) live in `src/components/ui` using the shadcn/ui conventions (Tailwind + `cn()` helper). The shadcn CLI is not required.
 
@@ -29,6 +29,7 @@ UI primitives (`Button`, `Card`, `Badge`) live in `src/components/ui` using the 
    1. `supabase/migrations/20261112000000_github_profile_cache.sql` (profile cache)
    2. `supabase/migrations/20261112100000_github_search_cache.sql` (prefix-search cache; **required for the user list to be cached**)
    3. `supabase/migrations/20261112200000_github_repos_cache.sql` (repository cache; **required for repository details and comparison to be cached**)
+   4. `supabase/migrations/20261116100000_rate_limit_snapshots.sql` (private rate-limit history; **required for scheduled sampling**)
 
    (Or with the Supabase CLI: `supabase link --project-ref <ref> && supabase db push`.)
 3. Go to **Project Settings → API** and copy:
@@ -84,11 +85,36 @@ npx supabase secrets set GITHUB_API_TOKEN=github_pat_xxxxxxxxxxxxxxxx
 
 # Recommended: only your own sites may call the proxy from a browser (comma-separated, no paths):
 npx supabase secrets set ALLOWED_ORIGINS=https://your-app.vercel.app,http://localhost:5173
+```
 
+If you want the private rate-limit dashboard, set its credentials as Supabase secrets. This step is optional for the main app. Create a temporary file **outside the repository**:
+
+```bash
+nano "$HOME/devscope-rate-limit.env"
+```
+
+Paste these lines into the editor with your own values, then save the file. Do not use `VITE_` variable names:
+
+```dotenv
+RATE_LIMIT_USERNAME=your-private-username
+RATE_LIMIT_PASSWORD=your-long-random-password
+```
+
+Then upload the secrets and remove the temporary file:
+
+```bash
+chmod 600 "$HOME/devscope-rate-limit.env"
+npx supabase secrets set --env-file "$HOME/devscope-rate-limit.env"
+rm "$HOME/devscope-rate-limit.env"
+```
+
+The project is already linked by the earlier `supabase link` command. Deploy the proxy after setting the secrets:
+
+```bash
 npx supabase functions deploy github-proxy --no-verify-jwt
 ```
 
-`--no-verify-jwt` (also set in `supabase/config.toml`) is intentional: the function does its own allowlisting and the browser sends no credentials. If you add a custom domain or use Vercel preview URLs, add those origins to `ALLOWED_ORIGINS` and run the `secrets set` command again.
+`--no-verify-jwt` (also set in `supabase/config.toml`) is intentional: regular app requests use the restricted proxy allowlist; the `/rate_limit` route separately requires the dashboard username and password. If you add a custom domain or use Vercel preview URLs, add those origins to `ALLOWED_ORIGINS` and run the `secrets set` command again.
 
 Check that it works (the `x-ratelimit-limit` header should say **5000**, not 60):
 
@@ -105,9 +131,65 @@ Set `VITE_GITHUB_PROXY=true`:
 
 Leave it unset to keep calling GitHub directly (no token). If the flag is on but the function is not deployed, the app shows a "GitHub is unavailable" error rather than silently falling back.
 
+### D. Private rate-limit dashboard
+
+After setting `RATE_LIMIT_USERNAME` and `RATE_LIMIT_PASSWORD` as Supabase function secrets and deploying `github-proxy`, open:
+
+```text
+https://YOUR-APP.vercel.app/rate-limit
+```
+
+There is no navigation or redirect button to this page. Sign in once and the dashboard keeps a signed, 12-hour session token in that browser tab, so refreshing the page does not log you out. Your password is not stored; the session token is cleared when you lock the dashboard or close the tab. The GitHub token remains in Supabase and is never sent to the browser. Live quota data is fetched from GitHub; the history endpoint returns only the protected snapshots stored in Supabase.
+
+#### Enable automatic history (one-time setup)
+
+The dashboard's graph uses one GitHub `/rate_limit` snapshot every 30 minutes. Snapshots are kept in a private Supabase table, with records older than 10 days deleted during each collection. The database migration above must be applied, and the proxy must be deployed before enabling the schedule.
+
+1. In Supabase **Database → Vault**, create these secrets. Use the same username and password already configured as Edge Function secrets:
+   - `rate_limit_snapshot_url`: `https://YOUR-PROJECT-REF.supabase.co/functions/v1/github-proxy/rate_limit/snapshot`
+   - `rate_limit_username`: your dashboard username
+   - `rate_limit_password`: your dashboard password
+2. In **SQL Editor**, run this once to enable the extensions and schedule a half-hourly call:
+
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+select cron.schedule(
+  'devexplore-rate-limit-snapshot',
+  '*/30 * * * *',
+  $cron$
+  select net.http_post(
+    url := (select decrypted_secret from vault.decrypted_secrets where name = 'rate_limit_snapshot_url'),
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Basic ' || replace(
+        replace(
+          encode(
+            convert_to(
+              (select decrypted_secret from vault.decrypted_secrets where name = 'rate_limit_username')
+              || ':' ||
+              (select decrypted_secret from vault.decrypted_secrets where name = 'rate_limit_password'),
+              'UTF8'
+            ),
+            'base64'
+          ),
+          E'\n', ''
+        ),
+        E'\r', ''
+      )
+    ),
+    body := '{}'::jsonb
+  );
+  $cron$
+);
+```
+
+The cron job runs in Supabase even when nobody has the website open. After the first run, the graph fills in over time; the 24-hour and 10-day views use the same half-hour snapshots. Check **Database → Cron Jobs** to confirm the job is scheduled. If you change the dashboard credentials, update the corresponding Vault secrets too.
+
 ### Upgrading from an earlier version
 
-Repository details need a new proxy route, so **redeploy the function after upgrading** (the secrets are kept): `npx supabase functions deploy github-proxy --no-verify-jwt --project-ref YOUR-PROJECT-REF`. Also run the new migration (step 1.3). Until the function is redeployed, repository details show "unavailable" when the proxy is enabled.
+Repository details and rate-limit history need newer proxy routes, so **redeploy the function after upgrading** (the secrets are kept): `npx supabase functions deploy github-proxy --no-verify-jwt --project-ref YOUR-PROJECT-REF`. Also apply the new migrations (steps 1.3 and 1.4). Until the function is redeployed, repository details show "unavailable" and historical rate-limit data cannot be loaded when the proxy is enabled.
 
 ### Rotating or revoking the token
 
@@ -115,7 +197,7 @@ Generate a new token (step A), run `npx supabase secrets set GITHUB_API_TOKEN=<n
 
 ### Proxy limitations
 
-- The Edge Function URL is reachable by anyone who knows it, and the browser key cannot prove who is calling. `ALLOWED_ORIGINS` blocks other websites in browsers, but a script could still call the proxy directly and spend your 5,000/hour. The strict allowlist limits what they can ask for, and the Supabase cache means normal use rarely reaches GitHub; if you see abuse, rotate the token or add rate limiting.
+- The Edge Function URL is reachable by anyone who knows it, and the browser key cannot prove who is calling. `ALLOWED_ORIGINS` blocks other websites in browsers, but a script could still call the public profile/search routes directly and spend your 5,000/hour. The `/rate_limit` route separately requires `RATE_LIMIT_USERNAME` and `RATE_LIMIT_PASSWORD`. The strict allowlist limits what callers can ask for, and the Supabase cache means normal use rarely reaches GitHub; if you see abuse, rotate the token or add rate limiting.
 - Supabase's free tier includes a monthly allowance of Edge Function invocations; each cache miss costs one.
 
 ## 3. Tests and build
