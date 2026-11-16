@@ -273,6 +273,7 @@ test('private rate-limit dashboard restores a temporary tab session across reloa
   const sessionToken = 'test-dashboard-session-token'
   let loginAuthorization = ''
   let sessionAuthorization = ''
+  let liveRateRequests = 0
   const cors = {
     'access-control-allow-origin': 'http://localhost:4173',
     'access-control-allow-methods': 'GET, POST, OPTIONS',
@@ -290,6 +291,13 @@ test('private rate-limit dashboard restores a temporary tab session across reloa
   }
   const snapshots = [2, 4].map((used, index) => ({
     captured_at: new Date(Date.now() - (1 - index) * 30 * 60 * 1000).toISOString(),
+    payload: {
+      resources: { core: { ...quotas.rate, used, remaining: quotas.rate.limit - used } },
+      rate: { ...quotas.rate, used, remaining: quotas.rate.limit - used },
+    },
+  }))
+  const liveSamples = [2, 3].map((used, index) => ({
+    captured_at: new Date(Date.now() - (2 - index) * 60 * 1000).toISOString(),
     payload: {
       resources: { core: { ...quotas.rate, used, remaining: quotas.rate.limit - used } },
       rate: { ...quotas.rate, used, remaining: quotas.rate.limit - used },
@@ -317,6 +325,7 @@ test('private rate-limit dashboard restores a temporary tab session across reloa
       return route.fulfill({ status: 204, headers: cors })
     }
 
+    liveRateRequests += 1
     sessionAuthorization = route.request().headers().authorization ?? ''
     if (sessionAuthorization !== `Bearer ${sessionToken}`) {
       return route.fulfill({ status: 401, headers: cors, json: { message: 'Unauthorized' } })
@@ -334,6 +343,13 @@ test('private rate-limit dashboard restores a temporary tab session across reloa
       json: snapshots,
     })
   })
+  await page.route('http://127.0.0.1:54321/functions/v1/github-proxy/rate_limit/live_history', async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      return route.fulfill({ status: 204, headers: cors })
+    }
+    sessionAuthorization = route.request().headers().authorization ?? sessionAuthorization
+    return route.fulfill({ status: 200, headers: cors, json: liveSamples })
+  })
 
   await page.goto('/rate-limit')
   await page.getByLabel('Dashboard username').fill('dashboard')
@@ -343,14 +359,22 @@ test('private rate-limit dashboard restores a temporary tab session across reloa
   await expect(page.getByRole('heading', { name: 'Primary quota' })).toBeVisible()
   await expect(page.getByLabel('Dashboard password')).toHaveCount(0)
   await expect(page.getByRole('heading', { name: 'Resource quotas' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Historical usage' })).toBeVisible()
-  await expect(page.getByRole('img', { name: 'Core API usage history for the last 24 hours' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Live usage trend · last 5 minutes' })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Core API live usage trend for the last 5 minutes' })).toBeVisible()
+  await page.getByRole('button', { name: '1 minute' }).click()
+  await expect(page.getByRole('heading', { name: 'Live usage trend · last 1 minute' })).toBeVisible()
+  await page.getByRole('button', { name: '5 minutes' }).click()
+  await expect(page.getByRole('img', { name: 'Core API live usage trend for the last 5 minutes' })).toBeVisible()
   await expect(page.getByRole('meter', { name: 'Primary core quota used' })).toHaveAttribute('aria-valuetext', /4 of/)
   await expect(page.getByRole('timer', { name: 'Primary Core reset countdown' })).toBeVisible()
   await expect(page.getByRole('timer', { name: 'Core reset countdown', exact: true })).toBeVisible()
   await expect(page.getByText(/^Reset: .*2026/)).toBeVisible()
-  await page.getByRole('button', { name: '10 days' }).click()
-  await expect(page.getByRole('img', { name: 'Core API usage history for the last 10 days' })).toBeVisible()
+  const sampleAge = page.getByRole('timer', { name: 'Live trend sample age' })
+  const initialSampleAge = await sampleAge.textContent()
+  await expect.poll(() => sampleAge.textContent()).not.toBe(initialSampleAge)
+  await expect.poll(() => liveRateRequests, { timeout: 15_000 }).toBeGreaterThan(1)
+  await page.getByRole('button', { name: '24h hourly' }).click()
+  await expect(page.getByRole('img', { name: 'Core API usage history for the last 24 hours, hourly' })).toBeVisible()
   expect(loginAuthorization).toBe(`Basic ${Buffer.from('dashboard:private-pass').toString('base64')}`)
   expect(sessionAuthorization).toBe(`Bearer ${sessionToken}`)
   const savedSession = await page.evaluate(() => sessionStorage.getItem('devexplore-rate-limit-session'))

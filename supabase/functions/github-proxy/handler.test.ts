@@ -161,6 +161,48 @@ describe('github-proxy handler', () => {
       expect(responseBody).not.toContain(TOKEN)
     })
 
+    it('persists authenticated live samples in 5-second buckets and prunes old samples', async () => {
+      const body = {
+        resources: { core: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 } },
+        rate: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 },
+      }
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === 'https://api.github.com/rate_limit') return upstreamResponse(body)
+        if (init?.method === 'POST' || init?.method === 'DELETE') return new Response(null, { status: 204 })
+        throw new Error(`Unexpected request: ${String(input)}`)
+      })
+      const response = await handleRequest(
+        new Request(`${BASE}/rate_limit`, { headers: { authorization } }),
+        env,
+        fetchMock as unknown as typeof fetch,
+      )
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual(body)
+      const insert = fetchMock.mock.calls[1] as unknown as [RequestInfo | URL, RequestInit]
+      expect(String(insert[0])).toContain('/rest/v1/rate_limit_live_samples?on_conflict=captured_at')
+      expect(JSON.parse(String(insert[1].body))[0].payload).toEqual(body)
+      const capturedAt = JSON.parse(String(insert[1].body))[0].captured_at
+      expect(Date.parse(capturedAt) % 5_000).toBe(0)
+      const prune = fetchMock.mock.calls[2] as unknown as [RequestInfo | URL, RequestInit]
+      expect(prune[1].method).toBe('DELETE')
+      expect(String(prune[0])).toContain('/rest/v1/rate_limit_live_samples?captured_at=lt.')
+    })
+
+    it('keeps GitHub quota responses available and exposes live storage failures', async () => {
+      const body = {
+        resources: { core: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 } },
+        rate: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 },
+      }
+      const { call } = setup({ ...env, supabaseUrl: undefined }, upstreamResponse(body))
+      const response = await call('/rate_limit', { headers: { authorization } })
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get('x-devscope-live-history-error')).toBe('storage_not_configured')
+      expect(response.headers.get('access-control-expose-headers')).toContain('x-devscope-live-history-error')
+      expect(await response.json()).toEqual(body)
+    })
+
     it('allows the browser to send Basic credentials in CORS preflight', async () => {
       const { call } = setup({})
       const response = await call('/rate_limit', {
@@ -239,6 +281,45 @@ describe('github-proxy handler', () => {
       expect(query.get('limit')).toBe('480')
       expect(query.get('captured_at')).toMatch(/^gte\./)
       expect((init.headers as Headers).get('authorization')).toBe('Bearer service-role-secret')
+    })
+
+    it('returns authenticated live samples from the last hour', async () => {
+      const samples = [{
+        captured_at: '2026-11-16T12:30:00+00:00',
+        payload: {
+          resources: { core: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 } },
+          rate: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 },
+        },
+      }]
+      const fetchMock = vi.fn(async () => new Response(JSON.stringify(samples), { status: 200 }))
+      const response = await handleRequest(
+        new Request(`${BASE}/rate_limit/live_history`, { headers: { authorization } }),
+        env,
+        fetchMock as unknown as typeof fetch,
+      )
+
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual(samples)
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+      const query = new URL(url).searchParams
+      expect(new URL(url).pathname).toBe('/rest/v1/rate_limit_live_samples')
+      expect(query.get('select')).toBe('captured_at,payload')
+      expect(query.get('order')).toBe('captured_at.asc')
+      expect(query.get('limit')).toBe('800')
+      expect(query.get('captured_at')).toMatch(/^gte\./)
+      expect((init.headers as Headers).get('authorization')).toBe('Bearer service-role-secret')
+    })
+
+    it('requires dashboard authentication to read live samples', async () => {
+      const fetchMock = vi.fn()
+      const response = await handleRequest(
+        new Request(`${BASE}/rate_limit/live_history`),
+        env,
+        fetchMock as unknown as typeof fetch,
+      )
+
+      expect(response.status).toBe(401)
+      expect(fetchMock).not.toHaveBeenCalled()
     })
   })
 

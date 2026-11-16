@@ -30,6 +30,7 @@ UI primitives (`Button`, `Card`, `Badge`) live in `src/components/ui` using the 
    2. `supabase/migrations/20261112100000_github_search_cache.sql` (prefix-search cache; **required for the user list to be cached**)
    3. `supabase/migrations/20261112200000_github_repos_cache.sql` (repository cache; **required for repository details and comparison to be cached**)
    4. `supabase/migrations/20261116100000_rate_limit_snapshots.sql` (private rate-limit history; **required for scheduled sampling**)
+   5. `supabase/migrations/20261116160000_rate_limit_live_samples.sql` (private live trend history)
 
    (Or with the Supabase CLI: `supabase link --project-ref <ref> && supabase db push`.)
 3. Go to **Project Settings → API** and copy:
@@ -143,7 +144,7 @@ There is no navigation or redirect button to this page. Sign in once and the das
 
 #### Enable automatic history (one-time setup)
 
-The dashboard's graph uses one GitHub `/rate_limit` snapshot every 30 minutes. Snapshots are kept in a private Supabase table, with records older than 10 days deleted during each collection. The database migration above must be applied, and the proxy must be deployed before enabling the schedule.
+The dashboard opens on a five-minute live trend. GitHub is queried every 5 seconds while the tab is active; the graph advances between readings using the last observed value, without making extra API requests. Select 1 minute, 5 minutes, 10 minutes, 30 minutes, or 1 hour to adjust the visible window. The proxy stores these samples in a private Supabase table, so the latest hour appears immediately after reload; samples older than one hour are pruned. The live table starts empty and fills as the dashboard is used after applying the live-history migration and deploying the updated proxy. The separate 24-hour view groups the latest saved half-hour snapshot in each hour; Supabase retains those snapshots for 10 days.
 
 1. In Supabase **Database → Vault**, create these secrets. Use the same username and password already configured as Edge Function secrets:
    - `rate_limit_snapshot_url`: `https://YOUR-PROJECT-REF.supabase.co/functions/v1/github-proxy/rate_limit/snapshot`
@@ -185,11 +186,30 @@ select cron.schedule(
 );
 ```
 
-The cron job runs in Supabase even when nobody has the website open. After the first run, the graph fills in over time; the 24-hour and 10-day views use the same half-hour snapshots. Check **Database → Cron Jobs** to confirm the job is scheduled. If you change the dashboard credentials, update the corresponding Vault secrets too.
+The cron job runs in Supabase even when nobody has the website open. After the first run, the hourly 24-hour view fills in over time by grouping the half-hour snapshots. The 5-second live view samples while its tab is active and is stored in Supabase for reloads. Check **Database → Cron Jobs** to confirm the job is scheduled. If you change the dashboard credentials, update the corresponding Vault secrets too.
 
 ### Upgrading from an earlier version
 
-Repository details and rate-limit history need newer proxy routes, so **redeploy the function after upgrading** (the secrets are kept): `npx supabase functions deploy github-proxy --no-verify-jwt --project-ref YOUR-PROJECT-REF`. Also apply the new migrations (steps 1.3 and 1.4). Until the function is redeployed, repository details show "unavailable" and historical rate-limit data cannot be loaded when the proxy is enabled.
+Repository details and rate-limit history need newer proxy routes, so **redeploy the function after upgrading** (the secrets are kept). From the repository root, run:
+
+```bash
+# Only needed if this checkout is not already linked to your Supabase project:
+npx supabase login
+npx supabase link --project-ref YOUR-PROJECT-REF
+
+# Deploy the updated 5-second live sampler:
+npx supabase functions deploy github-proxy --no-verify-jwt
+
+# Sign in/link once if this checkout is not already connected to Vercel:
+npx vercel login
+npx vercel link
+
+# Build and deploy the frontend:
+npm run build
+npx vercel --prod
+```
+
+Replace `YOUR-PROJECT-REF` with the project reference from `https://YOUR-PROJECT-REF.supabase.co`. The existing live-history table supports the new sampling interval; no additional migration is needed if step 1.5 was already applied. For a fresh setup, apply all migrations in steps 1.1–1.5. Until the function is redeployed, repository details show "unavailable" and historical rate-limit data cannot be loaded when the proxy is enabled.
 
 ### Rotating or revoking the token
 

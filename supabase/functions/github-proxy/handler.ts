@@ -9,7 +9,7 @@
  *   GET /users/{username}/repos   (per_page, sort, direction and type are fixed)
  *   GET /search/users?q={prefix} in:login[&per_page=1..30]   (sort/order are fixed)
  *   POST /rate_limit/session (exchanges dashboard credentials for a short-lived signed session)
- *   GET /rate_limit and GET /rate_limit/history (require dashboard authentication)
+ *   GET /rate_limit and its live/history routes (require dashboard authentication)
  *   POST /rate_limit/snapshot (requires dashboard Basic credentials; called by Supabase Cron)
  */
 
@@ -36,6 +36,8 @@ function jsonResponse(status: number, body: unknown, cors: Headers): Response {
 const GITHUB_API = 'https://api.github.com'
 const RATE_LIMIT_SNAPSHOT_INTERVAL_MS = 30 * 60 * 1000
 const RATE_LIMIT_RETENTION_MS = 10 * 24 * 60 * 60 * 1000
+const RATE_LIMIT_LIVE_SAMPLE_INTERVAL_MS = 5_000
+const RATE_LIMIT_LIVE_RETENTION_MS = 60 * 60 * 1000
 const RATE_LIMIT_SESSION_LIFETIME_SECONDS = 12 * 60 * 60
 const FUNCTION_PREFIX = '/github-proxy'
 const USERNAME = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/
@@ -44,6 +46,7 @@ const SEARCH_MAX_PER_PAGE = 30
 // Legacy name from before the DevExplore rebrand, kept so an already-deployed function and a newer app agree.
 export const PROXY_MARKER_HEADER = 'x-devscope-proxy'
 const RATE_LIMIT_ERROR_HEADER = 'x-devscope-rate-limit-error'
+const LIVE_HISTORY_ERROR_HEADER = 'x-devscope-live-history-error'
 
 /** Rate-limit headers the browser client needs to produce a helpful error. */
 const FORWARDED_HEADERS = [
@@ -73,7 +76,7 @@ function corsHeaders(allowedOrigins: string[], origin: string | null): Headers {
   headers.set('access-control-allow-headers', 'accept, authorization, content-type')
   headers.set(
     'access-control-expose-headers',
-    [...FORWARDED_HEADERS, PROXY_MARKER_HEADER, RATE_LIMIT_ERROR_HEADER].join(', '),
+    [...FORWARDED_HEADERS, PROXY_MARKER_HEADER, RATE_LIMIT_ERROR_HEADER, LIVE_HISTORY_ERROR_HEADER].join(', '),
   )
   // Lets the app tell "GitHub said 404" apart from "the function itself is missing" (platform 404).
   headers.set(PROXY_MARKER_HEADER, '1')
@@ -317,6 +320,79 @@ async function captureRateLimitSnapshot(
   return new Response(JSON.stringify({ captured_at: timestamp }), { status: 200, headers: headersOut })
 }
 
+async function persistLiveRateLimitSample(
+  env: ProxyEnv,
+  payload: unknown,
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) return 'storage_not_configured'
+
+  const now = Date.now()
+  const timestamp = new Date(
+    Math.floor(now / RATE_LIMIT_LIVE_SAMPLE_INTERVAL_MS) * RATE_LIMIT_LIVE_SAMPLE_INTERVAL_MS,
+  ).toISOString()
+  const endpoint = `${env.supabaseUrl.replace(/\/+$/, '')}/rest/v1/rate_limit_live_samples`
+  const headers = serviceRoleHeaders(env.supabaseServiceRoleKey)
+  headers.set('prefer', 'resolution=merge-duplicates,return=minimal')
+
+  let stored: Response
+  try {
+    stored = await fetchImpl(`${endpoint}?on_conflict=captured_at`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify([{ captured_at: timestamp, payload }]),
+    })
+  } catch {
+    return 'write_failed'
+  }
+  if (!stored.ok) return 'write_failed'
+
+  const cutoff = new Date(now - RATE_LIMIT_LIVE_RETENTION_MS).toISOString()
+  let pruned: Response
+  try {
+    pruned = await fetchImpl(`${endpoint}?captured_at=lt.${encodeURIComponent(cutoff)}`, {
+      method: 'DELETE',
+      headers: serviceRoleHeaders(env.supabaseServiceRoleKey),
+    })
+  } catch {
+    return 'prune_failed'
+  }
+  return pruned.ok ? null : 'prune_failed'
+}
+
+async function readRateLimitLiveHistory(
+  env: ProxyEnv,
+  cors: Headers,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    return errorResponse(503, 'Live rate-limit history storage is not configured', cors)
+  }
+
+  const cutoff = new Date(Date.now() - RATE_LIMIT_LIVE_RETENTION_MS).toISOString()
+  const query = new URLSearchParams({
+    select: 'captured_at,payload',
+    captured_at: `gte.${cutoff}`,
+    order: 'captured_at.asc',
+    limit: '800',
+  })
+  let response: Response
+  try {
+    response = await fetchImpl(
+      `${env.supabaseUrl.replace(/\/+$/, '')}/rest/v1/rate_limit_live_samples?${query.toString()}`,
+      { headers: serviceRoleHeaders(env.supabaseServiceRoleKey) },
+    )
+  } catch {
+    return errorResponse(502, 'Could not load live rate-limit history', cors)
+  }
+  if (!response.ok) return errorResponse(502, 'Could not load live rate-limit history', cors)
+
+  const headersOut = new Headers(cors)
+  headersOut.set('content-type', 'application/json')
+  headersOut.set('cache-control', 'no-store')
+  return new Response(await response.text(), { status: 200, headers: headersOut })
+}
+
 async function readRateLimitHistory(
   env: ProxyEnv,
   cors: Headers,
@@ -436,6 +512,13 @@ export async function handleRequest(
     return readRateLimitHistory(env, cors, fetchImpl)
   }
 
+  if (path === '/rate_limit/live_history') {
+    if (request.method !== 'GET') return errorResponse(405, 'Method not allowed', cors)
+    if (!env.rateLimitUsername || !env.rateLimitPassword) return dashboardNotConfiguredResponse(cors)
+    if (!(await hasDashboardAuthorization(request, env))) return unauthorizedResponse(cors)
+    return readRateLimitLiveHistory(env, cors, fetchImpl)
+  }
+
   if (request.method !== 'GET') return errorResponse(405, 'Method not allowed', cors)
 
   const resolved = resolveUpstream(requestUrl)
@@ -469,5 +552,18 @@ export async function handleRequest(
     const value = upstream.headers.get(name)
     if (value !== null) headers.set(name, value)
   }
-  return new Response(await upstream.text(), { status: upstream.status, headers })
+  const body = await upstream.text()
+  if (resolved.requiresDashboardAuth && upstream.ok) {
+    try {
+      const payload: unknown = JSON.parse(body)
+      if (isRateLimitData(payload)) {
+        const storageError = await persistLiveRateLimitSample(env, payload, fetchImpl)
+        if (storageError) headers.set(LIVE_HISTORY_ERROR_HEADER, storageError)
+      }
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error
+      headers.set(LIVE_HISTORY_ERROR_HEADER, 'invalid_response')
+    }
+  }
+  return new Response(body, { status: upstream.status, headers })
 }

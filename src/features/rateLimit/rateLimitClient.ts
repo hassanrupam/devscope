@@ -25,6 +25,7 @@ export type RateLimitResource = z.infer<typeof resourceSchema>
 export type RateLimitData = z.infer<typeof rateLimitSchema>
 export type RateLimitSnapshot = z.infer<typeof rateLimitSnapshotSchema>
 export type RateLimitSession = z.infer<typeof rateLimitSessionSchema>
+export type RateLimitFetchResult = { data: RateLimitData; liveHistoryError: string | null }
 
 function encodeCredentials(username: string, password: string): string {
   const bytes = new TextEncoder().encode(`${username}:${password}`)
@@ -70,7 +71,7 @@ export async function createRateLimitSession(username: string, password: string)
   return parsed.data
 }
 
-export async function fetchRateLimits(sessionToken: string): Promise<RateLimitData> {
+export async function fetchRateLimits(sessionToken: string): Promise<RateLimitFetchResult> {
   if (!isGitHubProxyEnabled) {
     throw new Error('The private dashboard is unavailable until the GitHub proxy is enabled.')
   }
@@ -103,7 +104,17 @@ export async function fetchRateLimits(sessionToken: string): Promise<RateLimitDa
 
   const parsed = rateLimitSchema.safeParse(body)
   if (!parsed.success) throw new Error('GitHub returned unexpected rate-limit data.')
-  return parsed.data
+  const liveHistoryErrorCode = response.headers.get('x-devscope-live-history-error')
+  const liveHistoryError = liveHistoryErrorCode === 'storage_not_configured'
+    ? 'Live sample storage is not configured. Apply the live-history migration and redeploy the proxy.'
+    : liveHistoryErrorCode === 'write_failed'
+      ? 'Could not save live trend samples to Supabase.'
+      : liveHistoryErrorCode === 'prune_failed'
+        ? 'Could not remove expired live trend samples from Supabase.'
+        : liveHistoryErrorCode
+          ? 'Could not persist live trend samples.'
+          : null
+  return { data: parsed.data, liveHistoryError }
 }
 
 export async function fetchRateLimitHistory(sessionToken: string): Promise<RateLimitSnapshot[]> {
@@ -135,5 +146,37 @@ export async function fetchRateLimitHistory(sessionToken: string): Promise<RateL
 
   const parsed = z.array(rateLimitSnapshotSchema).safeParse(body)
   if (!parsed.success) throw new Error('The rate-limit history service returned unexpected data.')
+  return parsed.data
+}
+
+export async function fetchRateLimitLiveHistory(sessionToken: string): Promise<RateLimitSnapshot[]> {
+  if (!isGitHubProxyEnabled) {
+    throw new Error('Live rate-limit history is unavailable until the GitHub proxy is enabled.')
+  }
+
+  let response: Response
+  try {
+    response = await fetch(`${config.githubApiBase}/rate_limit/live_history`, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${sessionToken}` },
+      cache: 'no-store',
+    })
+  } catch (error) {
+    throw new Error('Could not connect to the private live-history service.', { cause: error })
+  }
+
+  const dashboardError = response.headers.get('x-devscope-rate-limit-error')
+  if (dashboardError === 'unauthorized') throw new Error('Your dashboard session has expired.')
+  if (dashboardError === 'not_configured') throw new Error('Dashboard authentication is not configured on the server.')
+  if (!response.ok) throw new Error(`Could not load live rate-limit history (HTTP ${response.status}).`)
+
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch (error) {
+    throw new Error('The live-history service returned an unreadable response.', { cause: error })
+  }
+
+  const parsed = z.array(rateLimitSnapshotSchema).safeParse(body)
+  if (!parsed.success) throw new Error('The live-history service returned unexpected data.')
   return parsed.data
 }

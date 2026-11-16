@@ -8,15 +8,46 @@ import { cn, formatCount } from '@/lib/utils'
 import {
   createRateLimitSession,
   fetchRateLimitHistory,
+  fetchRateLimitLiveHistory,
   fetchRateLimits,
   type RateLimitData,
   type RateLimitResource,
   type RateLimitSession,
   type RateLimitSnapshot,
 } from '../rateLimitClient'
-import { RateLimitHistoryChart } from './RateLimitHistoryChart'
+import {
+  LIVE_SAMPLE_INTERVAL_MS,
+  LIVE_TREND_WINDOW_MS,
+  RateLimitHistoryChart,
+  type LiveRateSample,
+  type RateLimitTrendMode,
+} from './RateLimitHistoryChart'
 
 const SESSION_STORAGE_KEY = 'devexplore-rate-limit-session'
+
+function appendLiveSample(samples: LiveRateSample[], sample: LiveRateSample): LiveRateSample[] {
+  const timestamp = Math.floor(sample.timestamp / LIVE_SAMPLE_INTERVAL_MS) * LIVE_SAMPLE_INTERVAL_MS
+  const normalized = { ...sample, timestamp }
+  const recent = samples.filter((point) => point.timestamp >= timestamp - LIVE_TREND_WINDOW_MS)
+  const latest = recent.at(-1)
+  if (latest && timestamp - latest.timestamp < LIVE_SAMPLE_INTERVAL_MS) return recent
+  return [...recent, normalized]
+}
+
+function mergeLiveSamples(
+  current: LiveRateSample[],
+  persisted: LiveRateSample[],
+  now: number,
+): LiveRateSample[] {
+  const cutoff = now - LIVE_TREND_WINDOW_MS
+  const samples = new Map<number, LiveRateSample>()
+  for (const sample of [...persisted, ...current]) {
+    const timestamp = Math.floor(sample.timestamp / LIVE_SAMPLE_INTERVAL_MS) * LIVE_SAMPLE_INTERVAL_MS
+    if (timestamp < cutoff || timestamp > now) continue
+    samples.set(timestamp, { timestamp, used: sample.used })
+  }
+  return [...samples.values()].sort((left, right) => left.timestamp - right.timestamp)
+}
 
 function readStoredSession(): RateLimitSession | null {
   try {
@@ -240,11 +271,19 @@ function PrimaryQuotaCard({
   history,
   isHistoryLoading,
   historyError,
+  liveSamples,
+  trendMode,
+  onTrendModeChange,
+  liveTrendError,
 }: {
   resource: RateLimitResource
   history: RateLimitSnapshot[]
   isHistoryLoading: boolean
   historyError: string | null
+  liveSamples: LiveRateSample[]
+  trendMode: RateLimitTrendMode
+  onTrendModeChange: (mode: RateLimitTrendMode) => void
+  liveTrendError: string | null
 }) {
   const percent = resource.limit > 0 ? Math.min(100, (resource.used / resource.limit) * 100) : 0
   const reset = resource.reset > 0 ? new Date(resource.reset * 1000) : null
@@ -328,7 +367,14 @@ function PrimaryQuotaCard({
           Historical usage could not be loaded: {historyError}
         </p>
       ) : null}
-      <RateLimitHistoryChart snapshots={history} isLoading={isHistoryLoading} />
+      <RateLimitHistoryChart
+        snapshots={history}
+        liveSamples={liveSamples}
+        mode={trendMode}
+        onModeChange={onTrendModeChange}
+        isLoading={isHistoryLoading}
+        liveError={liveTrendError}
+      />
     </Card>
   )
 }
@@ -339,9 +385,12 @@ export function RateLimitDashboard() {
   const [session, setSession] = useState<RateLimitSession | null>(readStoredSession)
   const [data, setData] = useState<RateLimitData | null>(null)
   const [history, setHistory] = useState<RateLimitSnapshot[]>([])
+  const [liveSamples, setLiveSamples] = useState<LiveRateSample[]>([])
+  const [trendMode, setTrendMode] = useState<RateLimitTrendMode>('live')
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const [liveTrendError, setLiveTrendError] = useState<string | null>(null)
   const [isAuthenticating, setIsAuthenticating] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
@@ -354,10 +403,13 @@ export function RateLimitDashboard() {
     setHistoryError(null)
     setIsLoading(true)
     try {
-      const result = await fetchRateLimits(sessionToken)
+      const fetched = await fetchRateLimits(sessionToken)
       if (requestId !== activeRequest.current) return
-      setData(result)
-      setUpdatedAt(new Date())
+      const sample = { timestamp: Date.now(), used: fetched.data.rate.used }
+      setData(fetched.data)
+      setUpdatedAt(new Date(sample.timestamp))
+      setLiveSamples((current) => appendLiveSample(current, sample))
+      setLiveTrendError(fetched.liveHistoryError)
       setHistoryError(null)
       setIsHistoryLoading(true)
       try {
@@ -370,6 +422,29 @@ export function RateLimitDashboard() {
           } else {
             setHistory([])
             setHistoryError(cause instanceof Error ? cause.message : 'Could not load historical rate-limit data.')
+          }
+        }
+      }
+      try {
+        const snapshots = await fetchRateLimitLiveHistory(sessionToken)
+        if (requestId === activeRequest.current) {
+          setLiveSamples((current) => mergeLiveSamples(
+            current,
+            snapshots.map((snapshot) => ({
+              timestamp: Date.parse(snapshot.captured_at),
+              used: snapshot.payload.rate.used,
+            })),
+            Date.now(),
+          ))
+        }
+      } catch (cause) {
+        if (requestId === activeRequest.current) {
+          if (cause instanceof Error && cause.message.includes('session has expired')) {
+            endSession(true)
+          } else {
+            setLiveTrendError((current) => current ?? (cause instanceof Error
+              ? cause.message
+              : 'Could not load previous live trend data.'))
           }
         }
       } finally {
@@ -397,9 +472,11 @@ export function RateLimitDashboard() {
     setPassword('')
     setData(null)
     setHistory([])
+    setLiveSamples([])
     setUpdatedAt(null)
     setError(expired ? 'Your dashboard session expired. Please sign in again.' : null)
     setHistoryError(null)
+    setLiveTrendError(null)
     setIsLoading(false)
     setIsHistoryLoading(false)
   }
@@ -425,6 +502,41 @@ export function RateLimitDashboard() {
     if (!session) return
     void refreshDashboard(session.token)
   }, [session?.token])
+
+  useEffect(() => {
+    if (!session || !data || trendMode !== 'live') return
+
+    let cancelled = false
+    let requestInFlight = false
+    const pollLiveRateLimit = async () => {
+      if (cancelled || requestInFlight || document.visibilityState === 'hidden') return
+      requestInFlight = true
+      try {
+        const fetched = await fetchRateLimits(session.token)
+        if (cancelled) return
+        const sample = { timestamp: Date.now(), used: fetched.data.rate.used }
+        setData(fetched.data)
+        setUpdatedAt(new Date(sample.timestamp))
+        setLiveSamples((current) => appendLiveSample(current, sample))
+        setLiveTrendError(fetched.liveHistoryError)
+      } catch (cause) {
+        if (cancelled) return
+        if (cause instanceof Error && cause.message.includes('session has expired')) {
+          endSession(true)
+        } else {
+          setLiveTrendError(cause instanceof Error ? cause.message : 'Could not refresh the live rate-limit trend.')
+        }
+      } finally {
+        requestInFlight = false
+      }
+    }
+
+    const timer = window.setInterval(() => void pollLiveRateLimit(), LIVE_SAMPLE_INTERVAL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [session?.token, data !== null, trendMode])
 
   useEffect(() => {
     if (!session) return
@@ -554,6 +666,10 @@ export function RateLimitDashboard() {
                 history={history}
                 isHistoryLoading={isHistoryLoading}
                 historyError={historyError}
+                liveSamples={liveSamples}
+                trendMode={trendMode}
+                onTrendModeChange={setTrendMode}
+                liveTrendError={liveTrendError}
               />
             </section>
 
@@ -582,7 +698,7 @@ export function RateLimitDashboard() {
       </main>
 
       <footer className="mx-auto mt-10 max-w-prose text-center text-xs text-slate-500 sm:mt-12">
-        Live data is fetched from GitHub. Historical snapshots are collected every 30 minutes and retained for 10 days.
+        Live trend samples are collected every 5 seconds while its tab is active. Hourly history uses saved snapshots collected every 30 minutes and retained for 10 days.
       </footer>
     </div>
   )
