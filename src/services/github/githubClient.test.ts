@@ -23,7 +23,7 @@ function client(response: Response | Error) {
     if (response instanceof Error) throw response
     return response
   })
-  return { fetchMock, github: createGitHubClient(fetchMock as unknown as typeof fetch, 'https://api.test') }
+  return { fetchMock, github: createGitHubClient(fetchMock as unknown as typeof fetch, 'https://api.test', false) }
 }
 
 describe('githubClient.fetchProfile', () => {
@@ -245,5 +245,42 @@ describe('githubClient.fetchRepos', () => {
     const fetchMock = vi.fn(async () => new Response('{"code":"NOT_FOUND"}', { status: 404 }))
     const github = createGitHubClient(fetchMock as unknown as typeof fetch, 'https://p.test/github-proxy', true)
     await expect(github.fetchRepos('octocat')).rejects.toMatchObject({ code: 'upstream' })
+  })
+})
+
+describe('githubClient.fetchReport', () => {
+  const validReport = {
+    login: 'octocat',
+    generatedAt: '2026-11-16T00:00:00Z',
+    calendar: { start: '2026-11-01', counts: [1, 0, 2] },
+    totals: { contributions: 3, commits: 3, pullRequests: 0, issues: 0, reviews: 0 },
+    starsByYear: [{ year: 2020, repos: 1, stars: 3 }],
+    collaboration: { repos: [], topCoContributors: [] },
+    sentiment: { score: 0.2, sampleSize: 3, words: [{ text: 'cache', count: 2, tone: 0 }] },
+  }
+  const proxied = (response: Response) => {
+    const fetchMock = vi.fn(async () => response)
+    return { fetchMock, github: createGitHubClient(fetchMock as unknown as typeof fetch, 'https://proxy.test', true) }
+  }
+
+  it('fetches and validates the report through the proxy', async () => {
+    const { github, fetchMock } = proxied(new Response(JSON.stringify(validReport), { headers: { 'x-devscope-proxy': '1' } }))
+    await expect(github.fetchReport('octocat')).resolves.toMatchObject({ login: 'octocat' })
+    expect(fetchMock).toHaveBeenCalledWith('https://proxy.test/users/octocat/report', expect.anything())
+  })
+
+  it('is unavailable without the proxy (GraphQL needs a token)', async () => {
+    const { github, fetchMock } = client(new Response('{}'))
+    await expect(github.fetchReport('octocat')).rejects.toMatchObject({ code: 'unavailable' })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('maps an unknown user to not_found and a malformed report to upstream', async () => {
+    await expect(
+      proxied(new Response('{}', { status: 404, headers: { 'x-devscope-proxy': '1' } })).github.fetchReport('ghost'),
+    ).rejects.toMatchObject({ code: 'not_found' })
+    await expect(
+      proxied(new Response(JSON.stringify({ login: 'octocat' }), { headers: { 'x-devscope-proxy': '1' } })).github.fetchReport('octocat'),
+    ).rejects.toMatchObject({ code: 'upstream' })
   })
 })

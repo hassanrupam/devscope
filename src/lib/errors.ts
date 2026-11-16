@@ -4,6 +4,8 @@ export type AppErrorCode =
   | 'rate_limited'
   | 'network'
   | 'upstream'
+  /** A feature needs backend setup that is not enabled (e.g. the GitHub proxy). */
+  | 'unavailable'
 
 /** Errors that are safe to show to end users. Internal details stay in `cause`. */
 export class AppError extends Error {

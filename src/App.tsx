@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ArrowRightIcon, CheckIcon, CompareIcon, PlusIcon, SearchIcon } from '@/components/ui/icons'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -15,7 +15,17 @@ import { ResultStatus } from '@/features/profile/components/ResultStatus'
 import { SearchForm } from '@/features/profile/components/SearchForm'
 import { useProfile } from '@/features/profile/useProfile'
 import { RepoDetails } from '@/features/repos/components/RepoDetails'
+import { ReportCta } from '@/features/report/components/ReportCta'
 import { UserMatches } from '@/features/search/components/UserMatches'
+
+// The report pulls in charting/animation libraries, so it is only downloaded when someone opens it.
+const ReportPage = lazy(() => import('@/features/report/components/ReportPage').then((m) => ({ default: m.ReportPage })))
+
+const RateLimitDashboard = lazy(() =>
+  import('@/features/rateLimit/components/RateLimitDashboard').then((module) => ({
+    default: module.RateLimitDashboard,
+  })),
+)
 
 function NavTab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -36,6 +46,17 @@ function NavTab({ active, onClick, children }: { active: boolean; onClick: () =>
 }
 
 export default function App() {
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
+  return pathname === '/rate-limit' ? (
+    <Suspense fallback={<div role="status" className="p-8 text-center text-sm text-slate-500">Loading analytics…</div>}>
+      <RateLimitDashboard />
+    </Suspense>
+  ) : (
+    <ExploreApp />
+  )
+}
+
+function ExploreApp() {
   const [initial] = useState(() => parseUrlState(window.location.search))
   const [view, setView] = useState<View>(initial.view)
   // `query` drives the list of matching users; `selected` drives the full profile.
@@ -44,15 +65,44 @@ export default function App() {
     initial.query && isValidUsername(initial.query) ? initial.query : null,
   )
   const [compareUsers, setCompareUsers] = useState<string[]>(initial.users)
+  const [reportUser, setReportUser] = useState<string | null>(initial.report)
   const profile = useProfile(selected)
 
-  // Keep the address bar in sync so views can be bookmarked and shared.
+  // Keep the address bar in sync so views can be bookmarked and shared. Opening or leaving a report is
+  // a "page change" and gets its own history entry (so the browser Back button works); everything else
+  // (typing a search, editing the comparison) just rewrites the current entry.
+  const previousPage = useRef({ view, report: reportUser })
   useEffect(() => {
-    const search = serializeUrlState({ view, query, users: compareUsers })
     const url = new URL(window.location.href)
-    url.search = search
-    window.history.replaceState(null, '', url)
-  }, [view, query, compareUsers])
+    url.search = serializeUrlState({ view, query, users: compareUsers, report: reportUser })
+    const before = previousPage.current
+    const pageChanged = (view === 'report') !== (before.view === 'report') || (view === 'report' && reportUser !== before.report)
+    previousPage.current = { view, report: reportUser }
+    if (url.href === window.location.href) return
+    if (pageChanged) window.history.pushState(null, '', url)
+    else window.history.replaceState(null, '', url)
+  }, [view, query, compareUsers, reportUser])
+
+  // Browser Back / Forward: re-read the address bar.
+  useEffect(() => {
+    function onPopState() {
+      const state = parseUrlState(window.location.search)
+      previousPage.current = { view: state.view, report: state.report }
+      setView(state.view)
+      setQuery(state.query)
+      setSelected(state.query && isValidUsername(state.query) ? state.query : null)
+      setCompareUsers(state.users)
+      setReportUser(state.report)
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
+  function openReport(username: string) {
+    setReportUser(username.toLowerCase())
+    setView('report')
+    window.scrollTo({ top: 0 })
+  }
 
   function handleSearch(text: string) {
     setQuery(text)
@@ -114,7 +164,7 @@ export default function App() {
         </div>
         <p className="mt-2 text-slate-600 dark:text-slate-400">Explore and compare public GitHub developers.</p>
         <nav aria-label="Main" className="mt-5 inline-flex gap-1 rounded-2xl border border-white/70 bg-white/60 p-1.5 shadow-lg shadow-slate-900/[0.06] backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-900/60 dark:shadow-black/20">
-          <NavTab active={view === 'explore'} onClick={() => setView('explore')}>
+          <NavTab active={view === 'explore' || view === 'report'} onClick={() => setView('explore')}>
             <SearchIcon />
             Explore
           </NavTab>
@@ -126,7 +176,11 @@ export default function App() {
       </header>
 
       <main className="flex-1 space-y-6 sm:space-y-8">
-        {view === 'compare' ? (
+        {view === 'report' && reportUser ? (
+          <Suspense fallback={<p role="status" className="py-24 text-center text-sm text-slate-500">Loading report…</p>}>
+            <ReportPage username={reportUser} onBack={() => setView('explore')} />
+          </Suspense>
+        ) : view === 'compare' ? (
           <CompareView users={compareUsers} onAdd={addToComparison} onClear={clearComparison} onRemove={removeFromComparison} />
         ) : (
           <>
@@ -161,7 +215,9 @@ export default function App() {
                     <ProfileCard
                       profile={profile.data.profile}
                       actions={
-                        shownLogin && isInComparison(shownLogin) ? (
+                        <>
+                          {shownLogin && profile.data.profile.type === 'User' ? <ReportCta username={shownLogin} onOpen={openReport} /> : null}
+                          {shownLogin && isInComparison(shownLogin) ? (
                           <Button type="button" onClick={() => setView('compare')} className="h-10 border-emerald-500/30 bg-emerald-600 hover:bg-emerald-500">
                             <CheckIcon />
                             In comparison
@@ -186,7 +242,8 @@ export default function App() {
                               </>
                             )}
                           </Button>
-                        )
+                        )}
+                        </>
                       }
                     />
                     <RepoDetails profile={profile.data.profile} />

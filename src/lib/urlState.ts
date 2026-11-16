@@ -1,7 +1,7 @@
 import { config } from '@/config'
 import { parsePrefix, parseUsername } from './username'
 
-export type View = 'explore' | 'compare'
+export type View = 'explore' | 'compare' | 'report'
 
 /** Everything that is reflected in the address bar, so views can be bookmarked and shared. */
 export interface UrlState {
@@ -10,9 +10,11 @@ export interface UrlState {
   query: string | null
   /** Usernames in the comparison. */
   users: string[]
+  /** User whose full report is open (only meaningful when `view` is 'report'). */
+  report: string | null
 }
 
-/** Reads `?u=`, `?view=compare` and `?users=a,b,c`, ignoring anything invalid. */
+/** Reads `?u=`, `?view=compare|report`, `?users=a,b,c` and `?report=name`, ignoring anything invalid. */
 export function parseUrlState(search: string): UrlState {
   const params = new URLSearchParams(search)
 
@@ -36,10 +38,25 @@ export function parseUrlState(search: string): UrlState {
     }
   }
 
+  let report: string | null = null
+  const rawReport = params.get('report')
+  if (rawReport) {
+    try {
+      report = parseUsername(rawReport)
+    } catch {
+      report = null
+    }
+  }
+
+  const requested = params.get('view')
+  // A report view without a valid user has nothing to show, so it falls back to Explore.
+  const view: View = requested === 'compare' ? 'compare' : requested === 'report' && report ? 'report' : 'explore'
+
   return {
-    view: params.get('view') === 'compare' ? 'compare' : 'explore',
+    view,
     query,
     users: users.slice(0, config.maxCompareUsers),
+    report,
   }
 }
 
@@ -48,6 +65,10 @@ export function serializeUrlState(state: UrlState): string {
   const params = new URLSearchParams()
   if (state.query) params.set('u', state.query)
   if (state.view === 'compare') params.set('view', 'compare')
+  if (state.view === 'report' && state.report) {
+    params.set('view', 'report')
+    params.set('report', state.report)
+  }
   if (state.users.length > 0) params.set('users', state.users.join(','))
   return params.toString().replace(/%2C/g, ',')
 }

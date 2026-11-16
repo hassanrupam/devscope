@@ -6,6 +6,7 @@ const titles: Record<AppError['code'], string> = {
   rate_limited: 'GitHub rate limit reached',
   network: 'Connection problem',
   upstream: 'GitHub is unavailable',
+  unavailable: 'Feature not enabled',
 }
 
 export function ErrorPanel({ error }: { error: AppError }) {

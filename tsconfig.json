@@ -14,8 +14,9 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "types": ["vite/client", "node"],
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "e2e", "vite.config.ts", "playwright.config.ts", "supabase/functions/**/handler*.ts"]
+  "include": ["src", "e2e", "vite.config.ts", "playwright.config.ts", "supabase/functions/**/handler*.ts", "supabase/functions/**/report*.ts", "supabase/functions/**/sentiment*.ts"]
 }

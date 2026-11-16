@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
 const PORT = 4173
+// The report needs the GitHub proxy (GraphQL), so it runs against a second dev server with the proxy enabled.
+const REPORT_PORT = 4174
 
 export default defineConfig({
   testDir: './e2e',
@@ -10,7 +12,19 @@ export default defineConfig({
   use: { baseURL: `http://localhost:${PORT}`, trace: 'retain-on-failure' },
   projects: [
     {
+      name: 'proxy',
+      testMatch: /(report|profile)\.spec\.ts/,
+      // The report and the private rate-limit dashboard both need the GitHub proxy enabled.
+      grep: /@proxy/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: `http://localhost:${REPORT_PORT}`,
+        launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROME_PATH || undefined },
+      },
+    },
+    {
       name: 'chromium',
+      grepInvert: /@proxy/,
       use: {
         ...devices['Desktop Chrome'],
         // Optional: set PLAYWRIGHT_CHROME_PATH to use an already-installed Chrome.
@@ -18,14 +32,19 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    // Fake Supabase URL/key: every Supabase and GitHub request is mocked inside the tests.
-    command: `npm run dev -- --port ${PORT} --strictPort`,
-    port: PORT,
-    reuseExistingServer: false,
-    env: {
-      VITE_SUPABASE_URL: 'http://127.0.0.1:54321',
-      VITE_SUPABASE_ANON_KEY: 'e2e-test-key',
+  webServer: [
+    {
+      // Fake Supabase URL/key: every Supabase and GitHub request is mocked inside the tests.
+      command: `npm run dev -- --port ${PORT} --strictPort`,
+      port: PORT,
+      reuseExistingServer: false,
+      env: { VITE_SUPABASE_URL: 'http://127.0.0.1:54321', VITE_SUPABASE_ANON_KEY: 'e2e-test-key', VITE_GITHUB_PROXY: 'false' },
     },
-  },
+    {
+      command: `npm run dev -- --port ${REPORT_PORT} --strictPort`,
+      port: REPORT_PORT,
+      reuseExistingServer: false,
+      env: { VITE_SUPABASE_URL: 'http://127.0.0.1:54321', VITE_SUPABASE_ANON_KEY: 'e2e-test-key', VITE_GITHUB_PROXY: 'true' },
+    },
+  ],
 })

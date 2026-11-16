@@ -267,6 +267,143 @@ test('theme toggle switches between light and dark and remembers the choice', as
   await context.close()
 })
 
+test('private rate-limit dashboard restores a temporary tab session across reloads', { tag: '@proxy' }, async ({ browser }) => {
+  const db = newDb()
+  const { page, context } = await newVisitor(browser, db)
+  const sessionToken = 'test-dashboard-session-token'
+  let loginAuthorization = ''
+  let sessionAuthorization = ''
+  let liveRateRequests = 0
+  const cors = {
+    // the proxy-enabled dev server (see playwright.config.ts)
+    'access-control-allow-origin': 'http://localhost:4174',
+    'access-control-allow-methods': 'GET, POST, OPTIONS',
+    'access-control-allow-headers': 'accept, authorization',
+    'access-control-expose-headers': 'x-devscope-rate-limit-error',
+    'access-control-max-age': '86400',
+    'cache-control': 'no-store',
+  }
+  const quotas = {
+    resources: {
+      core: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 },
+      search: { limit: 30, used: 2, remaining: 28, reset: 1794809422 },
+    },
+    rate: { limit: 5000, used: 4, remaining: 4996, reset: 1794812414 },
+  }
+  const snapshots = [2, 4].map((used, index) => ({
+    captured_at: new Date(Date.now() - (1 - index) * 30 * 60 * 1000).toISOString(),
+    payload: {
+      resources: { core: { ...quotas.rate, used, remaining: quotas.rate.limit - used } },
+      rate: { ...quotas.rate, used, remaining: quotas.rate.limit - used },
+    },
+  }))
+  const liveSamples = [2, 3].map((used, index) => ({
+    captured_at: new Date(Date.now() - (2 - index) * 60 * 1000).toISOString(),
+    payload: {
+      resources: { core: { ...quotas.rate, used, remaining: quotas.rate.limit - used } },
+      rate: { ...quotas.rate, used, remaining: quotas.rate.limit - used },
+    },
+  }))
+
+  await page.route('http://127.0.0.1:54321/functions/v1/github-proxy/rate_limit/session', async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      return route.fulfill({ status: 204, headers: cors })
+    }
+
+    loginAuthorization = route.request().headers().authorization ?? ''
+    if (loginAuthorization !== `Basic ${Buffer.from('dashboard:private-pass').toString('base64')}`) {
+      return route.fulfill({ status: 401, headers: cors, json: { message: 'Unauthorized' } })
+    }
+    return route.fulfill({
+      status: 200,
+      headers: cors,
+      json: { token: sessionToken, expires_at: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString() },
+    })
+  })
+
+  await page.route('http://127.0.0.1:54321/functions/v1/github-proxy/rate_limit', async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      return route.fulfill({ status: 204, headers: cors })
+    }
+
+    liveRateRequests += 1
+    sessionAuthorization = route.request().headers().authorization ?? ''
+    if (sessionAuthorization !== `Bearer ${sessionToken}`) {
+      return route.fulfill({ status: 401, headers: cors, json: { message: 'Unauthorized' } })
+    }
+    return route.fulfill({ status: 200, headers: cors, json: quotas })
+  })
+  await page.route('http://127.0.0.1:54321/functions/v1/github-proxy/rate_limit/history', async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      return route.fulfill({ status: 204, headers: cors })
+    }
+    sessionAuthorization = route.request().headers().authorization ?? sessionAuthorization
+    return route.fulfill({
+      status: 200,
+      headers: cors,
+      json: snapshots,
+    })
+  })
+  await page.route('http://127.0.0.1:54321/functions/v1/github-proxy/rate_limit/live_history', async (route) => {
+    if (route.request().method() === 'OPTIONS') {
+      return route.fulfill({ status: 204, headers: cors })
+    }
+    sessionAuthorization = route.request().headers().authorization ?? sessionAuthorization
+    return route.fulfill({ status: 200, headers: cors, json: liveSamples })
+  })
+
+  await page.goto('/rate-limit')
+  await page.getByLabel('Dashboard username').fill('dashboard')
+  await page.getByLabel('Dashboard password').fill('private-pass')
+  await page.getByRole('button', { name: 'Sign in' }).click()
+
+  await expect(page.getByRole('heading', { name: 'Primary quota' })).toBeVisible()
+  await expect(page.getByLabel('Dashboard password')).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Resource quotas' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Live usage trend · last 5 minutes' })).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Core API live usage trend for the last 5 minutes' })).toBeVisible()
+  await page.getByRole('button', { name: '1 minute' }).click()
+  await expect(page.getByRole('heading', { name: 'Live usage trend · last 1 minute' })).toBeVisible()
+  await page.getByRole('button', { name: '5 minutes' }).click()
+  await expect(page.getByRole('img', { name: 'Core API live usage trend for the last 5 minutes' })).toBeVisible()
+  await expect(page.getByRole('meter', { name: 'Primary core quota used' })).toHaveAttribute('aria-valuetext', /4 of/)
+  await expect(page.getByRole('timer', { name: 'Primary Core reset countdown' })).toBeVisible()
+  await expect(page.getByRole('timer', { name: 'Core reset countdown', exact: true })).toBeVisible()
+  await expect(page.getByText(/^Reset: .*2026/)).toBeVisible()
+  const sampleAge = page.getByRole('timer', { name: 'Live trend sample age' })
+  const initialSampleAge = await sampleAge.textContent()
+  await expect.poll(() => sampleAge.textContent()).not.toBe(initialSampleAge)
+  await expect.poll(() => liveRateRequests, { timeout: 15_000 }).toBeGreaterThan(1)
+  await page.getByRole('button', { name: '24h hourly' }).click()
+  await expect(page.getByRole('img', { name: 'Core API usage history for the last 24 hours, hourly' })).toBeVisible()
+  expect(loginAuthorization).toBe(`Basic ${Buffer.from('dashboard:private-pass').toString('base64')}`)
+  expect(sessionAuthorization).toBe(`Bearer ${sessionToken}`)
+  const savedSession = await page.evaluate(() => sessionStorage.getItem('devexplore-rate-limit-session'))
+  expect(savedSession).toContain(sessionToken)
+  expect(savedSession).not.toContain('private-pass')
+  await expect(page).toHaveURL(/\/rate-limit$/)
+
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Primary quota' })).toBeVisible()
+  await expect(page.getByLabel('Dashboard password')).toHaveCount(0)
+  expect(sessionAuthorization).toBe(`Bearer ${sessionToken}`)
+
+  for (const width of [320, 360, 640, 1024, 1440, 3840]) {
+    await page.setViewportSize({ width, height: 900 })
+    const dimensions = await page.evaluate(() => ({
+      viewport: window.innerWidth,
+      document: document.documentElement.scrollWidth,
+    }))
+    expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport)
+  }
+
+  await page.getByRole('button', { name: 'Lock dashboard' }).click()
+  await expect(page.getByRole('heading', { name: 'Primary quota' })).toHaveCount(0)
+  await expect(page.getByLabel('Dashboard password')).toHaveValue('')
+  expect(await page.evaluate(() => sessionStorage.getItem('devexplore-rate-limit-session'))).toBeNull()
+  await context.close()
+})
+
 test('Explore and Compare fit mobile, desktop, and 4K viewports without page overflow', async ({ browser }) => {
   const db = newDb()
   const context = await browser.newContext({ viewport: { width: 320, height: 900 } })

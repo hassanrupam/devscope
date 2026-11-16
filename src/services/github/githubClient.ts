@@ -3,8 +3,10 @@ import { AppError } from '@/lib/errors'
 import {
   githubProfileSchema,
   repoSchema,
+  reportSchema,
   searchResponseSchema,
   type GitHubProfile,
+  type Report,
   type Repo,
   type SearchUser,
 } from './schema'
@@ -23,11 +25,17 @@ export interface GitHubClient {
   fetchRepos(username: string, signal?: AbortSignal): Promise<Repo[]>
   /** Users whose login starts with `prefix` (already normalised to lower-case). */
   searchUsersByPrefix(prefix: string, signal?: AbortSignal): Promise<SearchUser[]>
+  /**
+   * Activity report (contribution calendar, collaboration, sentiment). Needs the token-adding proxy,
+   * because GitHub's GraphQL API always requires authentication.
+   */
+  fetchReport(username: string, signal?: AbortSignal): Promise<Report>
 }
 
 export type ProfileFetcher = Pick<GitHubClient, 'fetchProfile'>
 export type UserSearcher = Pick<GitHubClient, 'searchUsersByPrefix'>
 export type RepoFetcher = Pick<GitHubClient, 'fetchRepos'>
+export type ReportFetcher = Pick<GitHubClient, 'fetchReport'>
 
 function parseResetHeader(value: string | null): Date | undefined {
   const seconds = Number(value)
@@ -111,6 +119,22 @@ export function createGitHubClient(
       return parsed.data.items
         .filter((user) => user.login.toLowerCase().startsWith(prefix))
         .slice(0, SEARCH_MAX_RESULTS)
+    },
+
+    async fetchReport(username, signal) {
+      if (!viaProxy) {
+        throw new AppError('unavailable', 'Activity insights need the GitHub proxy to be enabled for this deployment.')
+      }
+      const body = await getJson(
+        `/users/${encodeURIComponent(username)}/report`,
+        signal,
+        `No GitHub user named "${username}" was found.`,
+      )
+      const parsed = reportSchema.safeParse(body)
+      if (!parsed.success) {
+        throw new AppError('upstream', 'GitHub returned unexpected report data.', { cause: parsed.error })
+      }
+      return parsed.data
     },
 
     async fetchRepos(username, signal) {
