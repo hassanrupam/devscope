@@ -16,11 +16,19 @@ const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | unde
 const githubProxyRequested = (import.meta.env.VITE_GITHUB_PROXY as string | undefined)?.trim().toLowerCase() === 'true'
 export const isGitHubProxyEnabled = githubProxyRequested && supabaseUrl !== ''
 
+/** The report is about recent activity, so it is cached for a shorter time than the profile. Default: 24 hours. */
+function parseReportTtlHours(raw: string | undefined): number {
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 24
+}
+
 export const config = {
   supabaseUrl,
   supabaseAnonKey,
   /** How long a cached profile is considered fresh. Default: 7 days. */
   cacheTtlMs: parseTtlDays(import.meta.env.VITE_CACHE_TTL_DAYS as string | undefined) * 24 * 60 * 60 * 1000,
+  /** How long a cached developer report is considered fresh. Default: 24 hours. */
+  reportTtlMs: parseReportTtlHours(import.meta.env.VITE_REPORT_TTL_HOURS as string | undefined) * 60 * 60 * 1000,
   /** If another visitor is refreshing the same user, poll the cache this many times... */
   lockWaitAttempts: 4,
   /** ...waiting this long between polls. */

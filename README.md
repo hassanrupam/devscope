@@ -199,3 +199,26 @@ TanStack Query adds a small browser-local layer (5 minutes) purely for UX; it is
 - Cached rows are never deleted automatically (no background jobs in the MVP).
 - The production JS bundle is ~600 KB (~171 KB gzipped), mostly the Supabase client.
 - The refresh lock is advisory and short-lived; in a rare race two visitors may both fetch GitHub (the database throttle keeps the cache consistent).
+
+## Developer report page
+
+Every user profile has a **View full report** button that opens `?view=report&report=<username>`: an animated, in-depth page
+(Developer DNA, 3D contribution heatmap, velocity gauge, language tree, collaboration network, community sentiment).
+Browser Back/Forward work, and the link is shareable.
+
+**How it stays within GitHub rate limits.** The contribution calendar only exists in GitHub's GraphQL API, which always needs a
+token, so the report is built server-side by the existing `github-proxy` edge function (`GET /users/{username}/report`: one fixed
+GraphQL query plus up to 7 contributor lookups). The browser stores the compact result (a few KB) in Supabase
+(`github_report_cache`) with the same lock + throttle pattern as profiles and repos, so GitHub is hit at most once per user per
+cache window no matter how many visitors open the page. The report is fresh for 24 h (`VITE_REPORT_TTL_HOURS`); **Refresh Data**
+only rebuilds a report older than 1 hour. Profile and repository sections reuse the existing caches.
+
+**To enable it on a deployment**
+1. `supabase db push` (adds `20261116000000_github_report_cache.sql`).
+2. `supabase functions deploy github-proxy` (the `GITHUB_API_TOKEN` secret is reused).
+3. Set `VITE_GITHUB_PROXY=true`. Without the proxy, the activity sections show a "not enabled" message and the rest still works.
+
+**Notes on the data.** "Impact score" is DevExplore's own log-scaled estimate (not a GitHub ranking); "Star growth" is stars by the
+year each repo was created (GitHub has no star history); sentiment is a rough word-list estimate over public issue comments and
+PR/issue titles (only aggregate word counts are stored, never the comments). Export Report uses the browser's print dialog
+("Save as PDF"). The page is lazy-loaded, so recharts/framer-motion are not downloaded until a report is opened.

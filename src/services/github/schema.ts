@@ -63,3 +63,62 @@ export const repoSchema = z.object({
 
 export type Repo = z.infer<typeof repoSchema>
 
+
+/* ---------------------------------------------------------------------------------------------
+ * Developer report: one compact document built by the github-proxy edge function
+ * (GET /users/{username}/report) and stored in the shared cache as-is.
+ * ------------------------------------------------------------------------------------------- */
+
+const count = z.number().int().nonnegative()
+
+const reportContributorSchema = z.object({
+  login: z.string().min(1),
+  avatarUrl: z.httpUrl(),
+  contributions: count,
+})
+
+const reportNetworkRepoSchema = z.object({
+  nameWithOwner: z.string().min(3),
+  url: z.httpUrl(),
+  ownerLogin: z.string().min(1),
+  ownerAvatar: z.httpUrl(),
+  stars: count,
+  contributions: count,
+  external: z.boolean(),
+  contributors: z.array(reportContributorSchema).max(8),
+})
+
+export const reportSchema = z.object({
+  login: z.string().min(1),
+  generatedAt: z.string(),
+  calendar: z.object({
+    /** YYYY-MM-DD (UTC) of the first entry in `counts`. Empty when GitHub returned no calendar. */
+    start: z.string().regex(/^(\d{4}-\d{2}-\d{2})?$/),
+    counts: z.array(count).max(400),
+  }),
+  totals: z.object({
+    contributions: count,
+    commits: count,
+    pullRequests: count,
+    issues: count,
+    reviews: count,
+  }),
+  starsByYear: z.array(z.object({ year: z.number().int(), repos: count, stars: count })).max(40),
+  collaboration: z.object({
+    repos: z.array(reportNetworkRepoSchema).max(10),
+    topCoContributors: z
+      .array(z.object({ login: z.string().min(1), avatarUrl: z.httpUrl(), sharedRepos: count, contributions: count }))
+      .max(10),
+  }),
+  sentiment: z.object({
+    /** -1 (critical) .. 0 (neutral) .. +1 (happy) */
+    score: z.number().min(-1).max(1),
+    sampleSize: count,
+    words: z
+      .array(z.object({ text: z.string().min(1), count, tone: z.union([z.literal(-1), z.literal(0), z.literal(1)]) }))
+      .max(60),
+  }),
+})
+
+export type Report = z.infer<typeof reportSchema>
+export type ReportNetworkRepo = Report['collaboration']['repos'][number]

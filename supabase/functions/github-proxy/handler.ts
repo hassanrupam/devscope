@@ -1,14 +1,16 @@
 /**
  * GitHub proxy: adds the server-side GitHub token to a tiny allowlist of read-only requests.
  *
- * This file is plain Web-standard TypeScript (no Deno APIs, no imports) so that it can be unit-tested
+ * This file is plain Web-standard TypeScript (no Deno APIs) so that it can be unit-tested
  * with Vitest. `index.ts` wires it to Deno.serve and the real environment.
  *
  * It is deliberately NOT an open proxy. Only these upstream requests are possible:
  *   GET /users/{username}
  *   GET /users/{username}/repos   (per_page, sort, direction and type are fixed)
+ *   GET /users/{username}/report  (one fixed GraphQL query + a few contributor lookups; see report.ts)
  *   GET /search/users?q={prefix} in:login[&per_page=1..30]   (sort/order are fixed)
  */
+import { buildReport, ReportError } from './report.ts'
 
 export interface ProxyEnv {
   /** GitHub personal access token. Lives only in Supabase secrets, never in the browser. */
@@ -65,10 +67,15 @@ function errorResponse(status: number, message: string, cors: Headers): Response
   return new Response(JSON.stringify({ message }), { status, headers })
 }
 
+/** The request path relative to the function (works behind Supabase's `/functions/v1/github-proxy` prefix). */
+function routePath(url: URL): string {
+  const index = url.pathname.indexOf(FUNCTION_PREFIX)
+  return (index >= 0 ? url.pathname.slice(index + FUNCTION_PREFIX.length) : url.pathname).replace(/\/+$/, '')
+}
+
 /** Maps the incoming request to an allowed upstream GitHub URL, or an error message. */
 function resolveUpstream(url: URL): { upstream: string } | { error: string; status: number } {
-  const index = url.pathname.indexOf(FUNCTION_PREFIX)
-  const path = (index >= 0 ? url.pathname.slice(index + FUNCTION_PREFIX.length) : url.pathname).replace(/\/+$/, '')
+  const path = routePath(url)
 
   const userMatch = /^\/users\/([^/]+)$/.exec(path)
   const reposMatch = /^\/users\/([^/]+)\/repos$/.exec(path)
@@ -120,7 +127,11 @@ export async function handleRequest(
 
   if (!env.githubToken) return errorResponse(500, 'Proxy is not configured', cors)
 
-  const resolved = resolveUpstream(new URL(request.url))
+  const requestUrl = new URL(request.url)
+  const reportMatch = /^\/users\/([^/]+)\/report$/.exec(routePath(requestUrl))
+  if (reportMatch) return handleReport(reportMatch[1] ?? '', env.githubToken, cors, fetchImpl)
+
+  const resolved = resolveUpstream(requestUrl)
   if ('error' in resolved) return errorResponse(resolved.status, resolved.error, cors)
 
   let upstream: Response
@@ -145,4 +156,34 @@ export async function handleRequest(
     if (value !== null) headers.set(name, value)
   }
   return new Response(await upstream.text(), { status: upstream.status, headers })
+}
+
+async function handleReport(
+  rawUsername: string,
+  token: string,
+  cors: Headers,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  let username: string
+  try {
+    username = decodeURIComponent(rawUsername)
+  } catch {
+    return errorResponse(400, 'Invalid username', cors)
+  }
+  if (!USERNAME.test(username)) return errorResponse(400, 'Invalid username', cors)
+
+  try {
+    const report = await buildReport(username, { token, fetchImpl })
+    const headers = new Headers(cors)
+    headers.set('content-type', 'application/json')
+    headers.set('cache-control', 'no-store')
+    return new Response(JSON.stringify(report), { status: 200, headers })
+  } catch (error) {
+    if (error instanceof ReportError) {
+      const response = errorResponse(error.status, error.message, cors)
+      for (const [name, value] of Object.entries(error.headers)) response.headers.set(name, value)
+      return response
+    }
+    return errorResponse(502, 'Could not build the report', cors)
+  }
 }

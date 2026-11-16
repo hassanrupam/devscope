@@ -166,4 +166,60 @@ describe('github-proxy handler', () => {
       expect(fetchMock).not.toHaveBeenCalled()
     })
   })
+  describe('report route', () => {
+    const gqlUser = {
+      login: 'octocat',
+      contributionsCollection: {
+        totalCommitContributions: 1,
+        totalIssueContributions: 0,
+        totalPullRequestContributions: 0,
+        totalPullRequestReviewContributions: 0,
+        contributionCalendar: { totalContributions: 1, weeks: [{ contributionDays: [{ date: '2026-11-01', contributionCount: 1 }] }] },
+        commitContributionsByRepository: [],
+        pullRequestContributionsByRepository: [],
+      },
+      repositories: { nodes: [] },
+      issueComments: { nodes: [] },
+      pullRequests: { nodes: [] },
+      issues: { nodes: [] },
+    }
+
+    it('builds the report from GraphQL with the server-side token and marks the response', async () => {
+      const { call, fetchMock } = setup(undefined, upstreamResponse({ data: { user: gqlUser } }))
+      const response = await call('/users/octocat/report')
+
+      const [url, init] = upstreamCall(fetchMock)
+      expect(url).toBe('https://api.github.com/graphql')
+      expect(init.method).toBe('POST')
+      expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`)
+      expect(response.status).toBe(200)
+      expect(response.headers.get('x-devscope-proxy')).toBe('1')
+      const body = (await response.json()) as { login: string; calendar: { counts: number[] } }
+      expect(body.login).toBe('octocat')
+      expect(body.calendar.counts).toEqual([1])
+      expect(JSON.stringify([...response.headers.entries()])).not.toContain(TOKEN)
+    })
+
+    it('rejects invalid usernames and non-GET methods before touching GitHub', async () => {
+      const { call, fetchMock } = setup()
+      expect((await call('/users/-bad-/report')).status).toBe(400)
+      expect((await call('/users/octocat/report', { method: 'POST' })).status).toBe(405)
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+
+    it('answers 404 for an unknown user and 429 when rate limited', async () => {
+      const missing = setup(undefined, upstreamResponse({ data: { user: null }, errors: [{ type: 'NOT_FOUND' }] }))
+      expect((await missing.call('/users/ghost/report')).status).toBe(404)
+
+      const limited = setup(undefined, upstreamResponse({ errors: [{ type: 'RATE_LIMITED' }] }, { headers: { 'x-ratelimit-reset': '99' } }))
+      const response = await limited.call('/users/octocat/report')
+      expect(response.status).toBe(429)
+      expect(response.headers.get('x-ratelimit-reset')).toBe('99')
+    })
+
+    it('requires the token', async () => {
+      const { call } = setup({})
+      expect((await call('/users/octocat/report')).status).toBe(500)
+    })
+  })
 })

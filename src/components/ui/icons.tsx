@@ -85,3 +85,71 @@ export function MoonIcon({ className = 'size-4' }: IconProps) {
     </svg>
   )
 }
+
+export function SparklesIcon({ className = 'size-4' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z" />
+      <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z" />
+    </svg>
+  )
+}
+
+export function ReportIcon({ className = 'size-4' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 20V10m6 10V4m6 16v-7m5 7H3" />
+    </svg>
+  )
+}
+
+export function DownloadIcon({ className = 'size-4' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 3v12m0 0 4-4m-4 4-4-4M4 20h16" />
+    </svg>
+  )
+}
+
+export function RefreshIcon({ className = 'size-4' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4" />
+      <path d="M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4" />
+    </svg>
+  )
+}
+
+export function ArrowLeftIcon({ className = 'size-4' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M19 12H5m7-7-7 7 7 7" />
+    </svg>
+  )
+}
+
+export function InfoIcon({ className = 'size-4' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5m0-8h.01" />
+    </svg>
+  )
+}
+
+export function FlameIcon({ className = 'size-4' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 22c4 0 7-2.8 7-6.8 0-2.7-1.4-4.6-2.8-6.2-.4 1.4-1.2 2.2-2.2 2.6.5-3.8-1-7-4-9.6.1 3.3-1.6 5.2-3.2 7.2C5.4 11.1 5 12.6 5 15.2 5 19.2 8 22 12 22Z" />
+    </svg>
+  )
+}
+
+export function LockIcon({ className = 'size-4' }: IconProps) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="5" y="11" width="14" height="9" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  )
+}
