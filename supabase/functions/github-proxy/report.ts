@@ -91,7 +91,8 @@ export const REPORT_QUERY = /* GraphQL */ `
       pullRequests(last: 20) { nodes { title } }
       issues(last: 20) { nodes { title } }
     }
-  `
+  }
+`
 
 /* ---------- GraphQL response shape (only what we read) ---------- */
 
@@ -297,7 +298,11 @@ export async function buildReport(
   if (types.includes('RATE_LIMITED')) throw new ReportError(429, 'GitHub rate limit reached', rateHeaders(response))
   // GraphQL answers an unknown user (or an organisation) with data.user = null and a NOT_FOUND error.
   if (types.includes('NOT_FOUND') || (body.data && body.data.user === null)) throw new ReportError(404, 'Not Found')
-  if (!body.data?.user) throw new ReportError(502, 'GitHub returned unexpected data')
+  if (!body.data?.user) {
+    // GitHub's own error text (never contains the token) makes a bad query or a token restriction diagnosable.
+    const detail = (body.errors ?? []).map((e) => e.message).filter(Boolean).join('; ').slice(0, 300)
+    throw new ReportError(502, detail ? `GitHub could not build the report: ${detail}` : 'GitHub returned unexpected data')
+  }
 
   const user = body.data.user
   const picks = pickNetworkRepos(user)

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { reportSchema } from '../../../src/services/github/schema'
-import { buildReport, composeReport, pickNetworkRepos, ReportError, type GqlUser } from './report'
+import { buildReport, composeReport, pickNetworkRepos, REPORT_QUERY, ReportError, type GqlUser } from './report'
 
 const NOW = new Date('2026-11-16T12:00:00Z')
 const avatar = (n: string) => `https://avatars.githubusercontent.com/${n}?v=4`
@@ -135,5 +135,26 @@ describe('buildReport', () => {
       headers: { 'x-ratelimit-reset': '123' },
     })
     await expect(run(new Error('offline'))).rejects.toBeInstanceOf(ReportError)
+  })
+})
+
+describe('REPORT_QUERY', () => {
+  // GitHub rejects malformed GraphQL with no `data`, and mocked responses can never reveal that.
+  it('is structurally well formed (balanced braces and parentheses)', () => {
+    for (const [open, close] of [['{', '}'], ['(', ')']] as const) {
+      expect(REPORT_QUERY.split(open).length).toBe(REPORT_QUERY.split(close).length)
+    }
+    expect(REPORT_QUERY.trim().endsWith('}')).toBe(true)
+  })
+})
+
+describe('buildReport error detail', () => {
+  it('passes GitHub\'s error message through when no user comes back', async () => {
+    const fetchImpl = (async () =>
+      gqlResponse({ errors: [{ type: 'FORBIDDEN', message: 'Resource not accessible by personal access token' }] })) as unknown as typeof fetch
+    await expect(buildReport('octocat', { token: 'T', fetchImpl, now: () => NOW })).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringContaining('Resource not accessible'),
+    })
   })
 })
