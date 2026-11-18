@@ -5,7 +5,9 @@ import { cn } from '@/lib/utils'
 import type { CacheMeta } from '@/services/cache/cacheFirst'
 
 interface ReportCardProps {
-  title: string
+  /** Omit for a card that renders its own header (then pass `label` for accessibility). */
+  title?: string
+  label?: string
   subtitle?: string
   /** Small control shown at the top right (e.g. a toggle or a badge). */
   action?: ReactNode
@@ -22,7 +24,7 @@ interface ReportCardProps {
  * Glass card used by every report section: staggered entrance, a soft spotlight that follows the
  * pointer, and a consistent header/footer so the page reads as one system.
  */
-export function ReportCard({ title, subtitle, action, footer, index = 0, className, bodyClassName, children, testId }: ReportCardProps) {
+export function ReportCard({ title, label, subtitle, action, footer, index = 0, className, bodyClassName, children, testId }: ReportCardProps) {
   const ref = useRef<HTMLElement>(null)
 
   function onPointerMove(event: React.PointerEvent<HTMLElement>) {
@@ -37,7 +39,7 @@ export function ReportCard({ title, subtitle, action, footer, index = 0, classNa
     <motion.section
       ref={ref}
       data-testid={testId}
-      aria-label={title}
+      aria-label={title ?? label}
       onPointerMove={onPointerMove}
       initial={{ opacity: 0, y: 26 }}
       animate={{ opacity: 1, y: 0 }}
@@ -57,13 +59,15 @@ export function ReportCard({ title, subtitle, action, footer, index = 0, classNa
         style={{ background: 'radial-gradient(420px circle at var(--mx, 50%) var(--my, 0%), rgb(129 140 248 / 0.10), transparent 60%)' }}
       />
 
-      <header className="relative mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-base font-semibold tracking-tight sm:text-lg">{title}</h3>
-          {subtitle ? <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p> : null}
-        </div>
-        {action ? <div className="r-no-print shrink-0">{action}</div> : null}
-      </header>
+      {title ? (
+        <header className="relative mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold tracking-tight sm:text-lg">{title}</h3>
+            {subtitle ? <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p> : null}
+          </div>
+          {action ? <div className="r-no-print shrink-0">{action}</div> : null}
+        </header>
+      ) : null}
 
       <div className={cn('relative flex-1', bodyClassName)}>{children}</div>
 

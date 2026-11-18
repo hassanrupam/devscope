@@ -199,3 +199,11 @@
   0%, 100% { opacity: 0.12; }
   50% { opacity: 0.32; }
 }
+
+/* Admin sign-in backdrop */
+@keyframes r-aurora-drift {
+  0%, 100% { scale: 1; opacity: 0.8; }
+  50% { scale: 1.14; opacity: 1; }
+}
+.r-aurora { animation: r-aurora-drift 14s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .r-aurora { animation: none; } }

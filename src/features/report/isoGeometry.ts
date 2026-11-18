@@ -46,10 +46,10 @@ export interface IsoMetrics {
 export const DEFAULT_METRICS: IsoMetrics = { w: 10, h: 7.2, maxH: 96, minH: 4, gap: 0.14 }
 
 /** Canvas size (in SVG units) that fits the whole grid plus the tallest cube and a small margin. */
-export function sceneSize(cols: number, m: IsoMetrics = DEFAULT_METRICS, margin = 14) {
+export function sceneSize(cols: number, m: IsoMetrics = DEFAULT_METRICS, margin = 14, rows = 7) {
   return {
-    width: (cols + 7) * m.w + margin * 2,
-    height: (cols + 7) * m.h + m.maxH + margin * 2,
+    width: (cols + rows) * m.w + margin * 2,
+    height: (cols + rows) * m.h + m.maxH + margin * 2,
   }
 }
 
