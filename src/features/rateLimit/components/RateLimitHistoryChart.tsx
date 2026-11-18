@@ -121,9 +121,13 @@ export function RateLimitHistoryChart({
   const maxUsed = Math.max(10, ...data.flatMap((point) => point.used === null ? [] : [point.used]))
   const yMax = Math.ceil(maxUsed / 10) * 10
   const isLive = mode === 'live'
+  const values = data.flatMap((point) => (point.used === null ? [] : [point.used]))
+  const latestUsed = values.at(-1)
+  const minUsed = values.length ? Math.min(...values) : 0
+  const gained = values.length > 1 ? (latestUsed ?? 0) - (values[0] ?? 0) : 0
 
   return (
-    <div className="border-t border-slate-200/80 px-4 pb-4 pt-5 dark:border-slate-700/80 sm:px-6 sm:pb-6">
+    <div className="border-t border-slate-200/80 px-4 pb-4 pt-5 dark:border-white/[0.08] sm:px-6 sm:pb-6">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h3 className="font-semibold">{isLive ? `Live usage trend · last ${selectedWindow.longLabel}` : 'Historical usage graph · hourly'}</h3>
@@ -142,7 +146,7 @@ export function RateLimitHistoryChart({
               </>
             ) : 'Last 24 hours · hourly'}
           </span>
-          <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800" role="group" aria-label="Usage trend range">
+          <div className="flex gap-1 rounded-xl bg-slate-100 p-1 dark:bg-white/[0.06]" role="group" aria-label="Usage trend range">
             {(['live', '24h'] as const).map((value) => (
               <Button
                 key={value}
@@ -158,7 +162,7 @@ export function RateLimitHistoryChart({
             ))}
           </div>
           {isLive ? (
-            <div className="flex gap-0.5 rounded-xl bg-slate-100 p-1 dark:bg-slate-800" role="group" aria-label="Live trend window">
+            <div className="flex gap-0.5 rounded-xl bg-slate-100 p-1 dark:bg-white/[0.06]" role="group" aria-label="Live trend window">
               {LIVE_WINDOW_VALUES.map((value) => {
                 const option = LIVE_WINDOWS[value]
                 return (
@@ -180,6 +184,22 @@ export function RateLimitHistoryChart({
           ) : null}
         </div>
       </div>
+
+      {hasData ? (
+        <dl className="mb-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+          {[
+            ['Latest', formatCount(latestUsed ?? 0)],
+            ['Peak', formatCount(Math.max(...values))],
+            ['Low', formatCount(minUsed)],
+            ['Change', `${gained >= 0 ? '+' : ''}${formatCount(gained)}`],
+          ].map(([k, v]) => (
+            <div key={k} className="rounded-xl border border-slate-200/70 bg-slate-50/70 px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <dt className="text-[0.65rem] uppercase tracking-wider text-slate-500 dark:text-slate-400">{k}</dt>
+              <dd className="mt-0.5 text-sm font-semibold tabular-nums">{v}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
 
       {isLive && liveError ? (
         <p role="alert" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200">
@@ -218,8 +238,13 @@ export function RateLimitHistoryChart({
             <AreaChart data={data} margin={{ top: 12, right: 12, bottom: 4, left: 0 }}>
               <defs>
                 <linearGradient id="rate-history-gradient" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
+                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.42} />
+                  <stop offset="55%" stopColor="#6366f1" stopOpacity={0.14} />
+                  <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="rate-history-stroke" x1="0" x2="1" y1="0" y2="0">
+                  <stop offset="0%" stopColor="#22d3ee" />
+                  <stop offset="100%" stopColor="#a78bfa" />
                 </linearGradient>
               </defs>
               <CartesianGrid vertical={false} stroke="var(--chart-grid)" strokeDasharray="3 6" />
@@ -264,8 +289,8 @@ export function RateLimitHistoryChart({
                 type="monotone"
                 dataKey="used"
                 name="Used"
-                stroke="#22d3ee"
-                strokeWidth={2.5}
+                stroke="url(#rate-history-stroke)"
+                strokeWidth={2.75}
                 fill="url(#rate-history-gradient)"
                 activeDot={{ r: 5, stroke: '#e0f2fe', strokeWidth: 2, fill: '#06b6d4' }}
                 dot={!isLive && data.length <= 24 ? { r: 2.5, strokeWidth: 0, fill: '#67e8f9' } : false}
