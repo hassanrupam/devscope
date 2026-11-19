@@ -45,7 +45,7 @@ export function ReportCard({ title, label, subtitle, action, footer, index = 0, 
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.7, delay: Math.min(index, 8) * 0.09, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
-        'r-print-card group relative flex flex-col overflow-hidden rounded-2xl border p-4 sm:p-5',
+        'r-print-card group relative flex min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border p-4 sm:p-5',
         'border-slate-200/80 bg-white/80 shadow-xl shadow-slate-900/[0.05] backdrop-blur-xl',
         'dark:border-white/[0.08] dark:bg-gradient-to-b dark:from-slate-900/80 dark:to-slate-950/80 dark:shadow-black/40',
         className,
@@ -60,7 +60,7 @@ export function ReportCard({ title, label, subtitle, action, footer, index = 0, 
       />
 
       {title ? (
-        <header className="relative mb-4 flex items-start justify-between gap-3">
+        <header className="relative mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-base font-semibold tracking-tight sm:text-lg">{title}</h3>
             {subtitle ? <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p> : null}
@@ -72,7 +72,7 @@ export function ReportCard({ title, label, subtitle, action, footer, index = 0, 
       <div className={cn('relative flex-1', bodyClassName)}>{children}</div>
 
       {footer ? (
-        <footer className="relative mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-slate-200/70 pt-3 text-[0.7rem] text-slate-500 dark:border-white/[0.06] dark:text-slate-500">
+        <footer className="relative mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-slate-200/70 pt-3 text-[0.7rem] text-slate-500 dark:border-white/[0.06] dark:text-slate-500">
           {footer}
         </footer>
       ) : null}

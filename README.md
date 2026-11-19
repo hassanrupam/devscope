@@ -324,3 +324,19 @@ only rebuilds a report older than 1 hour. Profile and repository sections reuse 
 year each repo was created (GitHub has no star history); sentiment is a rough word-list estimate over public issue comments and
 PR/issue titles (only aggregate word counts are stored, never the comments). Export Report uses the browser's print dialog
 ("Save as PDF"). The page is lazy-loaded, so recharts/framer-motion are not downloaded until a report is opened.
+
+### Projects & Ecosystem (release timeline + security radar)
+
+The bottom of the report has two extra cards, built **only from free REST endpoints** (no GraphQL):
+
+- **Project Lifecycle Timeline**: latest releases from the user's most recently pushed repositories
+  (`/repos/{o}/{r}/releases`; repos that only publish version tags fall back to `/tags` + `/commits/{sha}`),
+  with release kind (major / minor / patch / pre-release), the gap since the previous release and the average cadence.
+- **Tech Stack & Security Radar**: root manifests (`package.json`, `requirements.txt`, `Cargo.toml`, `go.mod`, plus
+  detected build files) are parsed; latest versions come from npm / PyPI / crates.io / proxy.golang.org and each package is
+  checked against the GitHub Advisory DB (`/advisories?affects=pkg@version`). "Declared" is the lowest version the
+  manifest allows, not a resolved lockfile version.
+
+It is served by `GET /users/{username}/insights` in the `github-proxy` function, cached 24 h in Supabase
+(`github_insights_cache`, migration `20261118000000_github_insights_cache.sql`) and loaded separately, so the rest of the
+report never waits for it. Deploy with `npx supabase db push --remote` and `npx supabase functions deploy github-proxy`.

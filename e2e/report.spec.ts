@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { profile, repos, report } from './fixtures/report'
+import { insights, profile, repos, report } from './fixtures/report'
 
 /** Mocks the github-proxy function and the Supabase RPC cache; counts how often GitHub-side work happens. */
 async function mock(page: Page, cached: { report?: unknown } = {}) {
@@ -17,6 +17,7 @@ async function mock(page: Page, cached: { report?: unknown } = {}) {
       calls.report++
       return route.fulfill({ status: 200, headers: cors, json: report })
     }
+    if (path === '/users/octocat/insights') return route.fulfill({ status: 200, headers: cors, json: insights })
     return route.fulfill({ status: 404, headers: cors, json: {} })
   })
   await page.route('http://127.0.0.1:54321/rest/v1/rpc/*', (route) => {
@@ -54,6 +55,35 @@ test('profile CTA opens the full report with every section, and Back returns to 
   await expect(page.getByTestId('open-report')).toBeVisible()
   await page.goForward()
   await expect(page.getByTestId('report-page')).toBeVisible()
+})
+
+test('project timeline and security radar render from the insights endpoint', { tag: '@proxy' }, async ({ page }) => {
+  await mock(page)
+  await page.goto('/?view=report&report=octocat')
+
+  const timeline = page.getByTestId('timeline-card')
+  await expect(timeline.getByText('v6.13-rc3')).toBeVisible()
+  await expect(timeline.getByText('Every 7d')).toBeVisible()
+  await expect(timeline.getByText('+19d since 1.3.2')).toBeVisible()
+  await timeline.getByRole('button', { name: /v1\.4\.0/ }).click()
+  await expect(timeline.getByRole('link', { name: /Open on GitHub/ })).toBeVisible()
+
+  const radar = page.getByTestId('radar-card')
+  await expect(radar.getByText('package.json')).toBeVisible()
+  await expect(radar.getByRole('img', { name: /3 packages: 1 up to date, 1 outdated, 1 with security advisories/ })).toBeVisible()
+  await radar.getByRole('button', { name: 'Alerts' }).click()
+  await expect(radar.getByRole('list', { name: 'Packages' }).getByText('lodash', { exact: true })).toBeVisible()
+  await expect(radar.getByRole('list', { name: 'Packages' }).getByText('react', { exact: true })).toHaveCount(0)
+})
+
+test('a failing insights endpoint does not break the rest of the report', { tag: '@proxy' }, async ({ page }) => {
+  await mock(page)
+  await page.route('http://127.0.0.1:54321/functions/v1/github-proxy/users/octocat/insights', (r) =>
+    r.fulfill({ status: 502, headers: { 'access-control-allow-origin': '*', 'x-devscope-proxy': '1' }, json: { message: 'nope' } }),
+  )
+  await page.goto('/?view=report&report=octocat')
+  await expect(page.getByTestId('heatmap-card')).toBeVisible()
+  await expect(page.getByTestId('radar-card').getByRole('status')).toBeVisible()
 })
 
 test('a cached report is used without asking GitHub again', { tag: '@proxy' }, async ({ page }) => {

@@ -134,3 +134,30 @@ export const report = {
     ].map(([text, count, tone]) => ({ text, count, tone })),
   },
 }
+
+const ago = (days: number) => new Date(Date.UTC(2026, 10, 18) - days * DAY).toISOString()
+
+/** Release timeline + stack radar for "octocat" (what /users/octocat/insights returns). */
+export const insights = {
+  login: 'octocat',
+  generatedAt: '2026-11-18T12:00:00.000Z',
+  releases: {
+    cadenceDays: 7,
+    items: [
+      { repo: 'octocat/linux', tag: 'v6.13-rc3', kind: 'pre', prerelease: true, publishedAt: ago(2), sincePrevDays: 7, sincePrevTag: 'v6.13-rc2', notes: "Merge tag 'vfs-6.13-rc3', x86/mm TLB flush optimizations, and DRM subsystem fixes.", url: 'https://github.com/octocat/linux/releases/tag/v6.13-rc3', source: 'tag' },
+      { repo: 'octocat/linux', tag: 'v6.13-rc2', kind: 'pre', prerelease: true, publishedAt: ago(9), sincePrevDays: 7, sincePrevTag: 'v6.13-rc1', notes: 'Networking pull request updates and arm64 DT fixes.', url: 'https://github.com/octocat/linux/releases/tag/v6.13-rc2', source: 'tag' },
+      { repo: 'octocat/audionoise', tag: 'v1.4.0', kind: 'minor', prerelease: false, publishedAt: ago(24), sincePrevDays: 19, sincePrevTag: 'v1.3.2', notes: 'Added real-time IIR biquad filter coefficients generator.', url: 'https://github.com/octocat/audionoise/releases/tag/v1.4.0', source: 'release' },
+    ],
+  },
+  stack: {
+    manifests: [
+      { repo: 'audionoise', file: 'package.json', label: 'Node / npm' },
+      { repo: 'linux', file: 'Kconfig', label: 'Kernel build' },
+    ],
+    packages: [
+      { name: 'react', repo: 'audionoise', ecosystem: 'npm', installed: '18.0.0', latest: '19.2.0', status: 'outdated', advisory: null },
+      { name: 'lodash', repo: 'audionoise', ecosystem: 'npm', installed: '4.17.15', latest: '4.17.21', status: 'advisory', advisory: { id: 'GHSA-35jh-r3h4-6jhm', summary: 'Command injection in lodash', severity: 'high', url: 'https://github.com/advisories/GHSA-35jh-r3h4-6jhm' } },
+      { name: 'vite', repo: 'audionoise', ecosystem: 'npm', installed: '7.0.0', latest: '7.0.0', status: 'current', advisory: null },
+    ],
+  },
+}
