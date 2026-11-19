@@ -468,3 +468,19 @@ describe('github-proxy handler', () => {
     })
   })
 })
+
+describe('GET /users/{username}/insights', () => {
+  it('needs the server token and a valid username, and never forwards an arbitrary path', async () => {
+    expect((await setup({}).call('/users/octocat/insights')).status).toBe(500)
+    expect((await setup().call('/users/-bad-/insights')).status).toBe(400)
+    expect((await setup().call('/users/octocat/insights/extra')).status).not.toBe(200)
+  })
+
+  it('answers with the built document and no-store caching', async () => {
+    const { call } = setup({ githubToken: TOKEN }, upstreamResponse([]))
+    const response = await call('/users/octocat/insights')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(await response.json()).toMatchObject({ login: 'octocat', releases: { items: [] }, stack: { packages: [] } })
+  })
+})

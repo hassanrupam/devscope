@@ -122,3 +122,43 @@ export const reportSchema = z.object({
 
 export type Report = z.infer<typeof reportSchema>
 export type ReportNetworkRepo = Report['collaboration']['repos'][number]
+
+const insightRelease = z.object({
+  repo: z.string().min(1),
+  tag: z.string().min(1),
+  kind: z.enum(['major', 'minor', 'patch', 'pre']),
+  prerelease: z.boolean(),
+  publishedAt: z.string(),
+  sincePrevDays: z.number().int().nonnegative().nullable(),
+  sincePrevTag: z.string().nullable(),
+  notes: z.string().max(400),
+  url: z.httpUrl(),
+  source: z.enum(['release', 'tag']),
+})
+
+const insightPackage = z.object({
+  name: z.string().min(1),
+  repo: z.string().min(1),
+  ecosystem: z.enum(['npm', 'pip', 'rust', 'go']),
+  installed: z.string().min(1),
+  latest: z.string().nullable(),
+  status: z.enum(['current', 'outdated', 'advisory']),
+  advisory: z
+    .object({ id: z.string(), summary: z.string(), severity: z.string(), url: z.httpUrl() })
+    .nullable(),
+})
+
+/** Release timeline + tech-stack radar built by the proxy from free GitHub REST endpoints. */
+export const insightsSchema = z.object({
+  login: z.string().min(1),
+  generatedAt: z.string(),
+  releases: z.object({ cadenceDays: z.number().nonnegative().nullable(), items: z.array(insightRelease).max(12) }),
+  stack: z.object({
+    manifests: z.array(z.object({ repo: z.string(), file: z.string(), label: z.string() })).max(16),
+    packages: z.array(insightPackage).max(60),
+  }),
+})
+
+export type ProjectInsights = z.infer<typeof insightsSchema>
+export type InsightRelease = ProjectInsights['releases']['items'][number]
+export type InsightPackage = ProjectInsights['stack']['packages'][number]

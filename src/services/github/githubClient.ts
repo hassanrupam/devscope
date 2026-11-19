@@ -3,9 +3,11 @@ import { AppError } from '@/lib/errors'
 import {
   githubProfileSchema,
   repoSchema,
+  insightsSchema,
   reportSchema,
   searchResponseSchema,
   type GitHubProfile,
+  type ProjectInsights,
   type Report,
   type Repo,
   type SearchUser,
@@ -30,12 +32,15 @@ export interface GitHubClient {
    * because GitHub's GraphQL API always requires authentication.
    */
   fetchReport(username: string, signal?: AbortSignal): Promise<Report>
+  /** Release timeline and dependency / advisory radar. Also proxy-only (adds the token, calls registries). */
+  fetchInsights(username: string, signal?: AbortSignal): Promise<ProjectInsights>
 }
 
 export type ProfileFetcher = Pick<GitHubClient, 'fetchProfile'>
 export type UserSearcher = Pick<GitHubClient, 'searchUsersByPrefix'>
 export type RepoFetcher = Pick<GitHubClient, 'fetchRepos'>
 export type ReportFetcher = Pick<GitHubClient, 'fetchReport'>
+export type InsightsFetcher = Pick<GitHubClient, 'fetchInsights'>
 
 function parseResetHeader(value: string | null): Date | undefined {
   const seconds = Number(value)
@@ -133,6 +138,22 @@ export function createGitHubClient(
       const parsed = reportSchema.safeParse(body)
       if (!parsed.success) {
         throw new AppError('upstream', 'GitHub returned unexpected report data.', { cause: parsed.error })
+      }
+      return parsed.data
+    },
+
+    async fetchInsights(username, signal) {
+      if (!viaProxy) {
+        throw new AppError('unavailable', 'Project insights need the GitHub proxy to be enabled for this deployment.')
+      }
+      const body = await getJson(
+        `/users/${encodeURIComponent(username)}/insights`,
+        signal,
+        `No GitHub user named "${username}" was found.`,
+      )
+      const parsed = insightsSchema.safeParse(body)
+      if (!parsed.success) {
+        throw new AppError('upstream', 'GitHub returned unexpected project insight data.', { cause: parsed.error })
       }
       return parsed.data
     },

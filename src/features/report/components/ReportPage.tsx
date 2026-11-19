@@ -8,17 +8,20 @@ import { ErrorPanel } from '@/features/profile/components/ErrorPanel'
 import { useProfile } from '@/features/profile/useProfile'
 import { useRepos } from '@/features/repos/useRepos'
 import { calendarDays, languageTree } from '../metrics'
+import { useInsights } from '../useInsights'
 import { useRefreshReport, useReport } from '../useReport'
 import { CollaborationNetwork } from './CollaborationNetwork'
 import { ContributionHeatmap } from './ContributionHeatmap'
 import { DnaContent } from './DnaCard'
 import { LanguageTree } from './LanguageTree'
+import { cadenceLabel, ProjectTimeline } from './ProjectTimeline'
 import { CardFooter, ReportCard } from './ReportCard'
 import { ReportGate } from './ReportGate'
 import { ReportProgress } from './ReportProgress'
 import { SentimentCloud } from './SentimentCloud'
 import { BlockSkeleton, DnaSkeleton, Shimmer, VelocitySkeleton } from './Skeletons'
 import { StreakCards } from './StreakCards'
+import { TechRadar } from './TechRadar'
 import { VelocityContent } from './VelocityCard'
 
 const DAY_MS = 86_400_000
@@ -31,7 +34,7 @@ function placeholderDays() {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <motion.h2 initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className="flex items-center gap-2.5 text-lg font-bold tracking-tight sm:text-xl">
+    <motion.h2 initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }} className="mt-3 flex items-center gap-2.5 text-base font-bold tracking-tight first-of-type:mt-0 sm:text-lg">
       <span aria-hidden="true" className="h-5 w-1 rounded-full bg-gradient-to-b from-indigo-400 to-violet-500" />
       {children}
     </motion.h2>
@@ -66,6 +69,7 @@ export function ReportPage({ username, onBack }: ReportPageProps) {
   const repos = useRepos(username)
   const report = useReport(username)
   const refresh = useRefreshReport(username)
+  const insights = useInsights(username)
   const [note, setNote] = useState<string | null>(null)
 
   const loginForTitle = profile.data?.profile.login ?? username
@@ -121,8 +125,59 @@ export function ReportPage({ username, onBack }: ReportPageProps) {
     )
   }
 
+  const timelineCard = (
+    <ReportCard
+      title="Project Lifecycle Timeline"
+      subtitle="Release cadence & version stream"
+      index={3}
+      testId="timeline-card"
+      action={
+        insights.data ? (
+          <div className="text-right">
+            <p className="text-[0.65rem] text-slate-500">Avg Cadence</p>
+            <p className="font-mono text-sm font-bold text-violet-600 dark:text-violet-300">{cadenceLabel(insights.data.insights.releases.cadenceDays)}</p>
+          </div>
+        ) : undefined
+      }
+      footer={
+        insights.data ? (
+          <>
+            <span>Click a release to expand</span>
+            <span>{insights.data.insights.releases.items.length} releases · free GitHub REST API</span>
+          </>
+        ) : undefined
+      }
+    >
+      <ReportGate query={insights} skeleton={<BlockSkeleton label="Reading release history" className="[&>div:nth-child(2)]:h-64" />}>
+        {({ insights: data }) => <ProjectTimeline items={data.releases.items} />}
+      </ReportGate>
+    </ReportCard>
+  )
+
+  const radarCard = (
+    <ReportCard
+      title="Tech Stack & Security Radar"
+      subtitle="Parsed manifests & GitHub advisories"
+      index={3}
+      testId="radar-card"
+      className="flex-1"
+      footer={
+        insights.data ? (
+          <>
+            <span>Cross-referenced with GitHub Advisory DB</span>
+            <span>Versions from npm · PyPI · crates.io · Go</span>
+          </>
+        ) : undefined
+      }
+    >
+      <ReportGate query={insights} skeleton={<BlockSkeleton label="Scanning dependencies" className="[&>div:nth-child(2)]:h-64" />}>
+        {({ insights: data }) => <TechRadar stack={data.stack} />}
+      </ReportGate>
+    </ReportCard>
+  )
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }} className="space-y-6" data-testid="report-page">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }} className="flex min-w-0 flex-col gap-3" data-testid="report-page">
       {/* toolbar */}
       <div className="r-no-print relative flex flex-col items-center gap-3 sm:min-h-12">
         <button
@@ -150,76 +205,81 @@ export function ReportPage({ username, onBack }: ReportPageProps) {
         </AnimatePresence>
       </div>
 
-      <div className="grid items-start gap-x-6 gap-y-6 lg:grid-cols-2">
-        {/* ------------------------------ left column ------------------------------ */}
-        <div className="flex flex-col gap-4">
-          <SectionHeading>Developer DNA</SectionHeading>
+      {/* Layout: most valuable first. Every row is a two-column grid whose cards stretch to equal height. */}
+      <SectionHeading>Developer overview</SectionHeading>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReportCard title="Profile" subtitle="Identity, tenure and footprint" index={0} testId="dna-card" footer={<CardFooter meta={profile.data} ttlMs={config.cacheTtlMs} />}>
+          {user ? <DnaContent profile={user} repos={repos.data?.repos} report={report.data?.report} reportLoading={report.isPending} /> : <DnaSkeleton />}
+        </ReportCard>
 
-          <ReportCard title="Profile" subtitle="Identity, tenure and footprint" index={0} testId="dna-card" footer={<CardFooter meta={profile.data} ttlMs={config.cacheTtlMs} />}>
-            {user ? <DnaContent profile={user} repos={repos.data?.repos} report={report.data?.report} reportLoading={report.isPending} /> : <DnaSkeleton />}
-          </ReportCard>
+        <ReportCard title="Velocity Index" subtitle="Commit velocity · last 30 days" index={1} testId="velocity-card" footer={reportFooter}>
+          <ReportGate query={report} skeleton={<VelocitySkeleton />}>
+            {({ report: data }) => <VelocityContent days={days} starsByYear={data.starsByYear} />}
+          </ReportGate>
+        </ReportCard>
+      </div>
 
-          <ReportCard title="Contributions Heatmap" subtitle="Annual activity — hover a column for the day" index={1} testId="heatmap-card" footer={reportFooter}>
-            <ReportGate query={report} skeleton={<ContributionHeatmap days={floor} loading />}>
-              {() => <ContributionHeatmap days={days} />}
-            </ReportGate>
-          </ReportCard>
+      <SectionHeading>Activity &amp; security</SectionHeading>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReportCard title="Contributions Heatmap" subtitle="Annual activity — hover a column for the day" index={2} testId="heatmap-card" footer={reportFooter}>
+          <ReportGate query={report} skeleton={<ContributionHeatmap days={floor} loading />}>
+            {() => <ContributionHeatmap days={days} />}
+          </ReportGate>
+        </ReportCard>
 
+        <div className="flex min-w-0 flex-col gap-4">
           {report.data ? (
-            <StreakCards days={days} />
+            <StreakCards days={days} index={2} />
           ) : report.isPending ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <Shimmer className="h-28" />
               <Shimmer className="h-28" />
             </div>
           ) : null}
+          {radarCard}
         </div>
+      </div>
 
-        {/* ------------------------------ right column ----------------------------- */}
-        <div className="flex flex-col gap-4">
-          <SectionHeading>Impact &amp; Growth Metrics</SectionHeading>
+      <SectionHeading>Projects &amp; languages</SectionHeading>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {timelineCard}
+        <ReportCard
+          title="Project Diversity Tree"
+          subtitle="Language ecosystem"
+          index={3}
+          testId="tree-card"
+          footer={
+            repos.data ? (
+              <>
+                <span>Primary stack &amp; projects · forks excluded</span>
+                <span>Powered by GitHub &amp; Supabase</span>
+              </>
+            ) : undefined
+          }
+        >
+          {repos.error ? (
+            <p role="status" className="py-8 text-center text-sm text-slate-500">{toAppError(repos.error).message}</p>
+          ) : repos.isPending || !user ? (
+            <BlockSkeleton label="Loading languages" />
+          ) : (
+            <LanguageTree login={user.login} avatarUrl={user.avatar_url} tree={tree} />
+          )}
+        </ReportCard>
+      </div>
 
-          <ReportCard title="Velocity Index" subtitle="Commit velocity · last 30 days" index={1} testId="velocity-card" footer={reportFooter}>
-            <ReportGate query={report} skeleton={<VelocitySkeleton />}>
-              {({ report: data }) => <VelocityContent days={days} starsByYear={data.starsByYear} />}
-            </ReportGate>
-          </ReportCard>
+      <SectionHeading>Community</SectionHeading>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ReportCard title="Collaboration Network" subtitle="Key repositories contributed to" index={4} testId="network-card" footer={reportFooter}>
+          <ReportGate query={report} skeleton={<BlockSkeleton label="Mapping collaborators" className="[&>div:nth-child(2)]:h-64" />}>
+            {({ report: data }) => (user ? <CollaborationNetwork login={user.login} avatarUrl={user.avatar_url} collaboration={data.collaboration} /> : null)}
+          </ReportGate>
+        </ReportCard>
 
-          <ReportCard
-            title="Project Diversity Tree"
-            subtitle="Language ecosystem"
-            index={2}
-            testId="tree-card"
-            footer={
-              repos.data ? (
-                <>
-                  <span>Primary stack &amp; projects · forks excluded</span>
-                  <span>Powered by GitHub &amp; Supabase</span>
-                </>
-              ) : undefined
-            }
-          >
-            {repos.error ? (
-              <p role="status" className="py-8 text-center text-sm text-slate-500">{toAppError(repos.error).message}</p>
-            ) : repos.isPending || !user ? (
-              <BlockSkeleton label="Loading languages" />
-            ) : (
-              <LanguageTree login={user.login} avatarUrl={user.avatar_url} tree={tree} />
-            )}
-          </ReportCard>
-
-          <ReportCard title="Collaboration Network" subtitle="Key repositories contributed to" index={3} testId="network-card" footer={reportFooter}>
-            <ReportGate query={report} skeleton={<BlockSkeleton label="Mapping collaborators" className="[&>div:nth-child(2)]:h-64" />}>
-              {({ report: data }) => (user ? <CollaborationNetwork login={user.login} avatarUrl={user.avatar_url} collaboration={data.collaboration} /> : null)}
-            </ReportGate>
-          </ReportCard>
-
-          <ReportCard title="Community Sentiment" subtitle="Tone of recent pull request & issue conversations" index={4} testId="sentiment-card" footer={reportFooter}>
-            <ReportGate query={report} skeleton={<BlockSkeleton label="Analysing sentiment" />}>
-              {({ report: data }) => <SentimentCloud sentiment={data.sentiment} />}
-            </ReportGate>
-          </ReportCard>
-        </div>
+        <ReportCard title="Community Sentiment" subtitle="Tone of recent pull request & issue conversations" index={5} testId="sentiment-card" bodyClassName="flex flex-col justify-center" footer={reportFooter}>
+          <ReportGate query={report} skeleton={<BlockSkeleton label="Analysing sentiment" />}>
+            {({ report: data }) => <SentimentCloud sentiment={data.sentiment} />}
+          </ReportGate>
+        </ReportCard>
       </div>
     </motion.div>
   )

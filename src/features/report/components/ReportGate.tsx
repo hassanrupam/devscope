@@ -2,16 +2,15 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { LockIcon, RefreshIcon } from '@/components/ui/icons'
 import { toAppError } from '@/lib/errors'
-import type { ReportResult } from '../reportService'
 
-interface ReportGateProps {
-  query: UseQueryResult<ReportResult>
+interface ReportGateProps<T> {
+  query: UseQueryResult<T>
   skeleton: ReactNode
-  children: (result: ReportResult) => ReactNode
+  children: (result: T) => ReactNode
 }
 
 /** Shows a skeleton while the report loads, a friendly message if it cannot be built, else the section. */
-export function ReportGate({ query, skeleton, children }: ReportGateProps) {
+export function ReportGate<T>({ query, skeleton, children }: ReportGateProps<T>) {
   if (query.isPending) return <>{skeleton}</>
   if (query.error || !query.data) {
     const error = toAppError(query.error)

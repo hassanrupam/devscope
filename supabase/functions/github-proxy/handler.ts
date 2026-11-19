@@ -8,11 +8,13 @@
  *   GET /users/{username}
  *   GET /users/{username}/repos   (per_page, sort, direction and type are fixed)
  *   GET /users/{username}/report  (one fixed GraphQL query + a few contributor lookups; see report.ts)
+ *   GET /users/{username}/insights (releases, manifests, advisories via fixed REST reads; see insights.ts)
  *   GET /search/users?q={prefix} in:login[&per_page=1..30]   (sort/order are fixed)
  *   POST /rate_limit/session (exchanges dashboard credentials for a short-lived signed session)
  *   GET /rate_limit and its live/history routes (require dashboard authentication)
  *   POST /rate_limit/snapshot (requires dashboard Basic credentials; called by Supabase Cron)
  */
+import { buildInsights, InsightsError } from './insights.ts'
 import { buildReport, ReportError } from './report.ts'
 
 export interface ProxyEnv {
@@ -529,6 +531,12 @@ export async function handleRequest(
     return handleReport(reportMatch[1] ?? '', env.githubToken, cors, fetchImpl)
   }
 
+  const insightsMatch = /^\/users\/([^/]+)\/insights$/.exec(path)
+  if (insightsMatch) {
+    if (!env.githubToken) return errorResponse(500, 'Proxy is not configured', cors)
+    return handleInsights(insightsMatch[1] ?? '', env.githubToken, cors, fetchImpl)
+  }
+
   const resolved = resolveUpstream(requestUrl)
   if ('error' in resolved) return errorResponse(resolved.status, resolved.error, cors)
 
@@ -603,5 +611,31 @@ async function handleReport(
       return response
     }
     return errorResponse(502, 'Could not build the report', cors)
+  }
+}
+
+async function handleInsights(
+  rawUsername: string,
+  token: string,
+  cors: Headers,
+  fetchImpl: typeof fetch,
+): Promise<Response> {
+  let username: string
+  try {
+    username = decodeURIComponent(rawUsername)
+  } catch {
+    return errorResponse(400, 'Invalid username', cors)
+  }
+  if (!USERNAME.test(username)) return errorResponse(400, 'Invalid username', cors)
+
+  try {
+    const insights = await buildInsights(username, { token, fetchImpl })
+    const headers = new Headers(cors)
+    headers.set('content-type', 'application/json')
+    headers.set('cache-control', 'no-store')
+    return new Response(JSON.stringify(insights), { status: 200, headers })
+  } catch (error) {
+    if (error instanceof InsightsError) return errorResponse(error.status, error.message, cors)
+    return errorResponse(502, 'Could not build the project insights', cors)
   }
 }
