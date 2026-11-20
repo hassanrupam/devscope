@@ -24,6 +24,11 @@ export const githubProfileSchema = z.object({
   followers: z.number().int().nonnegative().default(0),
   following: z.number().int().nonnegative().default(0),
   created_at: z.string().nullish().transform((v) => v ?? null),
+  // Extra fields. Null (not 0) when an older cached copy did not store them, so the UI can show "—".
+  public_gists: z.number().int().nonnegative().nullish().transform((v) => v ?? null),
+  twitter_username: nullableText,
+  hireable: z.boolean().nullish().transform((v) => v ?? null),
+  updated_at: z.string().nullish().transform((v) => v ?? null),
 })
 
 export type GitHubProfile = z.infer<typeof githubProfileSchema>
@@ -59,6 +64,13 @@ export const repoSchema = z.object({
   fork: z.boolean().default(false),
   archived: z.boolean().default(false),
   pushed_at: z.string().nullish().transform((v) => v ?? null),
+  created_at: z.string().nullish().transform((v) => v ?? null),
+  open_issues_count: z.number().int().nonnegative().default(0),
+  topics: z.array(z.string().max(50)).max(20).nullish().transform((v) => v ?? []),
+  license: z
+    .object({ spdx_id: z.string().nullish() })
+    .nullish()
+    .transform((v) => (v?.spdx_id && v.spdx_id !== 'NOASSERTION' ? v.spdx_id : null)),
 })
 
 export type Repo = z.infer<typeof repoSchema>

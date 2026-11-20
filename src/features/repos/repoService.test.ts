@@ -21,6 +21,10 @@ const repos: Repo[] = [
     fork: false,
     archived: false,
     pushed_at: null,
+    created_at: null,
+    open_issues_count: 0,
+    topics: [],
+    license: null,
   },
 ]
 

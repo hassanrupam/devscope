@@ -24,6 +24,10 @@ const profile: GitHubProfile = {
   followers: 2,
   following: 3,
   created_at: null,
+  public_gists: null,
+  twitter_username: null,
+  hireable: null,
+  updated_at: null,
 }
 
 const entry = (ageMs: number): CachedProfile => ({ profile, fetchedAt: new Date(NOW.getTime() - ageMs) })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { GitHubProfile } from '@/services/github/schema'
 import type { RepoSummary } from '@/features/repos/summarize'
-import { bestIndexes, METRICS, type ComparisonColumn } from './metrics'
+import { bestIndexes, METRICS, radarRows, sharedLanguages, winCounts, type ComparisonColumn } from './metrics'
 
 describe('bestIndexes', () => {
   it('returns the index of the single highest value', () => {
@@ -68,5 +68,34 @@ describe('METRICS', () => {
 
   it('does not rank "following" as better when higher', () => {
     expect(byId.following?.higherIsBetter).toBe(false)
+  })
+})
+
+describe('comparison helpers', () => {
+  const lang = (language: string) => ({ language, repos: 1, percent: 50 })
+  const mk = (username: string, followers: number, stars: number, languages: string[]) =>
+    column({
+      username,
+      profile: { ...(column().profile as NonNullable<ComparisonColumn['profile']>), followers },
+      summary: { ...(column().summary as NonNullable<ComparisonColumn['summary']>), totalStars: stars, languages: languages.map(lang) },
+    })
+
+  it('counts the metrics each column leads', () => {
+    const { wins, contested } = winCounts([mk('a', 100, 5, ['Go']), mk('b', 50, 9, ['Go'])])
+    expect(wins[0]).toBeGreaterThanOrEqual(1)
+    expect(wins[1]).toBeGreaterThanOrEqual(1)
+    expect(contested).toBeGreaterThanOrEqual(2)
+  })
+
+  it('finds languages used by everyone', () => {
+    expect(sharedLanguages([mk('a', 1, 1, ['Go', 'Rust', 'C']), mk('b', 1, 1, ['Rust', 'Go'])])).toEqual(['Go', 'Rust'])
+    expect(sharedLanguages([mk('a', 1, 1, ['Go'])])).toEqual([])
+  })
+
+  it('scales radar axes against the largest value with sqrt smoothing', () => {
+    const rows = radarRows([mk('a', 100, 4, ['Go']), mk('b', 25, 4, ['Go'])])
+    const followers = rows.find((r) => r.axis === 'Followers')
+    expect(followers).toMatchObject({ a: 100, b: 50 })
+    expect(rows.find((r) => r.axis === 'Stars')).toMatchObject({ a: 100, b: 100 })
   })
 })

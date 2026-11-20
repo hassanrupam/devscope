@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { PageBackdrop } from '@/components/PageBackdrop'
+import { SiteFooter } from '@/components/SiteFooter'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button } from '@/components/ui/button'
 import { ReportCard } from '@/features/report/components/ReportCard'
@@ -269,6 +271,7 @@ export function RateLimitDashboard() {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col px-4 py-6 sm:px-6 sm:py-10 lg:px-8 xl:px-10 2xl:px-12">
+      <PageBackdrop />
       <header className="relative isolate mb-6 flex flex-wrap items-center justify-between gap-4 sm:mb-8">
         <div aria-hidden="true" className="pointer-events-none absolute left-1/3 -top-8 -z-10 h-48 w-2/3 max-w-4xl -translate-x-1/2 rounded-full bg-indigo-400/20 blur-3xl dark:bg-indigo-500/15" />
         <div>
@@ -400,9 +403,7 @@ export function RateLimitDashboard() {
         ) : null}
       </main>
 
-      <footer className="mx-auto mt-10 max-w-prose text-center text-xs text-slate-500 sm:mt-12">
-        Live trend samples are collected every 5 seconds while its tab is active. Hourly history uses saved snapshots collected every 30 minutes and retained for 10 days.
-      </footer>
+      <SiteFooter note="Live trend samples are collected every 5 seconds while this tab is active. Hourly history uses saved snapshots collected every 30 minutes and retained for 10 days." />
     </div>
   )
 }

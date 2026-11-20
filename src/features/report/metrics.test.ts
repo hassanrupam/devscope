@@ -116,6 +116,10 @@ const profile = (over: Partial<GitHubProfile> = {}): GitHubProfile => ({
   followers: 100,
   following: 5,
   created_at: '2016-01-01T00:00:00Z',
+  public_gists: null,
+  twitter_username: null,
+  hireable: null,
+  updated_at: null,
   ...over,
 })
 
@@ -147,6 +151,10 @@ const repo = (name: string, language: string | null, stars: number, fork = false
   fork,
   archived: false,
   pushed_at: null,
+  created_at: null,
+  open_issues_count: 0,
+  topics: [],
+  license: null,
 })
 
 describe('languageTree', () => {

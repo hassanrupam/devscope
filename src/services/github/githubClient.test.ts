@@ -209,6 +209,10 @@ describe('githubClient.fetchRepos', () => {
       fork: false,
       archived: false,
       pushed_at: '2026-01-01T00:00:00Z',
+      created_at: null,
+      open_issues_count: 0,
+      topics: [],
+      license: null,
     })
   })
 

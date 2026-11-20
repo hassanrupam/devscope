@@ -14,6 +14,10 @@ const repo = (overrides: Partial<Repo> = {}): Repo => ({
   fork: false,
   archived: false,
   pushed_at: null,
+  created_at: null,
+  open_issues_count: 0,
+  topics: [],
+  license: null,
   ...overrides,
 })
 
@@ -27,6 +31,13 @@ describe('summarizeRepos', () => {
       languages: [],
       topRepos: [],
       lastPushedAt: null,
+      archivedRepos: 0,
+      openIssues: 0,
+      avgStars: 0,
+      topics: [],
+      licenses: [],
+      createdByYear: [],
+      activeRecently: 0,
     })
   })
 
@@ -91,3 +102,25 @@ describe('isTruncated', () => {
   })
 })
 
+
+describe('summarizeRepos extras', () => {
+  const now = new Date('2026-11-18T00:00:00Z')
+  it('derives averages, topics, licenses, yearly creation and recent activity', () => {
+    const summary = summarizeRepos(
+      [
+        repo({ stargazers_count: 10, topics: ['cli', 'go'], license: 'MIT', created_at: '2022-05-01T00:00:00Z', pushed_at: '2026-11-01T00:00:00Z' }),
+        repo({ stargazers_count: 5, topics: ['cli'], license: 'MIT', created_at: '2024-02-01T00:00:00Z', pushed_at: '2025-01-01T00:00:00Z', archived: true, open_issues_count: 3 }),
+        repo({ stargazers_count: 999, fork: true, topics: ['ignored'] }),
+      ],
+      6,
+      now,
+    )
+    expect(summary.avgStars).toBe(7.5)
+    expect(summary.topics).toEqual([{ topic: 'cli', count: 2 }, { topic: 'go', count: 1 }])
+    expect(summary.licenses).toEqual([{ license: 'MIT', count: 2 }])
+    expect(summary.createdByYear.map((y) => [y.year, y.count])).toEqual([[2022, 1], [2023, 0], [2024, 1]])
+    expect(summary.activeRecently).toBe(1)
+    expect(summary.archivedRepos).toBe(1)
+    expect(summary.openIssues).toBe(3)
+  })
+})

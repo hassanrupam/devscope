@@ -1,0 +1,10 @@
+/* TEAM */
+Developer & maintainer: Hassan Rupam
+Site: https://hassanrupam.vercel.app/
+GitHub: https://github.com/hassanrupam/
+LinkedIn: https://www.linkedin.com/in/hassanrupam/
+Contact: hassanrupam@gmail.com
+
+/* SITE */
+Name: DevExplore
+Standards: HTML5, CSS3, React, TypeScript, Supabase

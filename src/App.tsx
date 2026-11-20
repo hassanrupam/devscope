@@ -1,6 +1,9 @@
+import { motion } from 'framer-motion'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { ArrowRightIcon, CheckIcon, CompareIcon, PlusIcon, SearchIcon } from '@/components/ui/icons'
+import { ArrowRightIcon, CheckIcon, CompareIcon, PlusIcon, ReportIcon, SearchIcon, SparklesIcon } from '@/components/ui/icons'
+import { PageBackdrop } from '@/components/PageBackdrop'
+import { SiteFooter } from '@/components/SiteFooter'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { config } from '@/config'
 import { toAppError } from '@/lib/errors'
@@ -34,16 +37,28 @@ function NavTab({ active, onClick, children }: { active: boolean; onClick: () =>
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'inline-flex w-32 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors sm:w-36 sm:px-4',
-        active
-          ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-950/15'
-          : 'text-slate-600 hover:bg-white/70 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/80 dark:hover:text-white',
+        'relative inline-flex w-32 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors sm:w-36 sm:px-4',
+        active ? 'text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white',
       )}
     >
-      {children}
+      {active ? (
+        <motion.span
+          layoutId="main-nav-pill"
+          aria-hidden="true"
+          transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+          className="absolute inset-0 -z-0 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 shadow-md shadow-indigo-600/30"
+        />
+      ) : null}
+      <span className="relative z-10 inline-flex items-center gap-2">{children}</span>
     </button>
   )
 }
+
+const FEATURES = [
+  { icon: <SearchIcon className="size-5" />, title: 'Profiles & repositories', text: 'Followers, stars, forks, languages, topics, licenses and repo age at a glance.', tint: 'from-indigo-500 to-violet-500' },
+  { icon: <CompareIcon className="size-5" />, title: 'Compare side by side', text: 'Up to five developers with winners, bars and a skill radar.', tint: 'from-cyan-500 to-sky-500' },
+  { icon: <ReportIcon className="size-5" />, title: '3D developer reports', text: 'Contribution heatmaps, release timelines and a dependency security radar.', tint: 'from-emerald-500 to-teal-500' },
+] as const
 
 export default function App() {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/'
@@ -147,23 +162,23 @@ function ExploreApp() {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col px-4 py-6 sm:px-6 sm:py-10 lg:px-8 xl:px-10 2xl:px-12">
+      <PageBackdrop />
       <header className="relative isolate mb-6 text-center sm:mb-8">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 -top-4 -z-10 h-48 w-11/12 max-w-4xl -translate-x-1/2 rounded-full bg-indigo-400/20 blur-3xl dark:bg-indigo-500/15"
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-8 -z-10 h-32 w-2/3 max-w-xl -translate-x-1/2 rounded-full bg-sky-300/20 blur-3xl dark:bg-violet-400/10"
-        />
-        <div className="relative flex items-center justify-center">
+        <div className="relative flex items-center justify-center gap-3">
+          <span
+            aria-hidden="true"
+            title="Crafted by Hassan Rupam"
+            className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30 sm:size-11"
+          >
+            <SparklesIcon className="size-5" />
+          </span>
           <h1 className="text-2xl font-bold tracking-tight sm:text-4xl 2xl:text-5xl">
-            Dev<span className="text-indigo-600 dark:text-indigo-400">Explore</span>
+            Dev<span className="bg-gradient-to-r from-indigo-600 to-violet-500 bg-clip-text text-transparent dark:from-indigo-300 dark:to-cyan-300">Explore</span>
           </h1>
           <ThemeToggle />
         </div>
         <p className="mt-2 text-slate-600 dark:text-slate-400">Explore and compare public GitHub developers.</p>
-        <nav aria-label="Main" className="mt-5 inline-flex gap-1 rounded-2xl border border-white/70 bg-white/60 p-1.5 shadow-lg shadow-slate-900/[0.06] backdrop-blur-xl dark:border-slate-800/80 dark:bg-slate-900/60 dark:shadow-black/20">
+        <nav aria-label="Main" className="mt-5 inline-flex gap-1 rounded-2xl border border-slate-200/80 bg-white/70 p-1.5 shadow-lg shadow-slate-900/[0.06] backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/70 dark:shadow-black/30">
           <NavTab active={view === 'explore' || view === 'report'} onClick={() => setView('explore')}>
             <SearchIcon />
             Explore
@@ -175,7 +190,7 @@ function ExploreApp() {
         </nav>
       </header>
 
-      <main className="flex-1 space-y-6 sm:space-y-8">
+      <main className="flex-1 space-y-4 sm:space-y-6">
         {view === 'report' && reportUser ? (
           <Suspense fallback={<p role="status" className="py-24 text-center text-sm text-slate-500">Loading report…</p>}>
             <ReportPage username={reportUser} onBack={() => setView('explore')} />
@@ -193,9 +208,26 @@ function ExploreApp() {
             />
 
             {query === null ? (
-              <p className="rounded-2xl border border-dashed border-slate-300/80 bg-white/45 p-6 text-center text-sm text-slate-600 shadow-sm backdrop-blur-sm dark:border-slate-700/80 dark:bg-slate-900/45 dark:text-slate-400 sm:p-8">
-                Enter a username above to see their public profile, repositories and matching users.
-              </p>
+              <div className="mx-auto w-full max-w-3xl space-y-4">
+                <p className="text-center text-sm text-slate-600 dark:text-slate-400">
+                  Enter a username above to see their public profile, repositories and matching users.
+                </p>
+                <ul className="grid gap-3 sm:grid-cols-3">
+                  {FEATURES.map((feature, i) => (
+                    <motion.li
+                      key={feature.title}
+                      initial={{ opacity: 0, y: 14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.15 + i * 0.08, duration: 0.5 }}
+                      className="rounded-2xl border border-slate-200/80 bg-white/70 p-4 shadow-lg shadow-slate-900/[0.04] backdrop-blur-xl transition-all hover:-translate-y-1 hover:shadow-xl dark:border-white/[0.08] dark:bg-white/[0.03]"
+                    >
+                      <span className={cn('grid size-9 place-items-center rounded-xl bg-gradient-to-br text-white shadow-md', feature.tint)}>{feature.icon}</span>
+                      <p className="mt-3 text-sm font-semibold">{feature.title}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">{feature.text}</p>
+                    </motion.li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
 
             {selected !== null ? (
@@ -212,6 +244,8 @@ function ExploreApp() {
                 ) : profile.data ? (
                   <>
                     <ResultStatus result={profile.data} />
+                    <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+                    <div className="min-w-0 lg:sticky lg:top-4">
                     <ProfileCard
                       profile={profile.data.profile}
                       actions={
@@ -246,7 +280,9 @@ function ExploreApp() {
                         </>
                       }
                     />
+                    </div>
                     <RepoDetails profile={profile.data.profile} />
+                    </div>
                   </>
                 ) : null}
               </section>
@@ -266,10 +302,7 @@ function ExploreApp() {
         )}
       </main>
 
-      <footer className="mx-auto mt-10 max-w-prose text-center text-xs text-slate-500 sm:mt-12">
-        Public data from the GitHub API. Profiles, repositories and searches are cached for a few days to stay within
-        GitHub rate limits.
-      </footer>
+      <SiteFooter />
     </div>
   )
 }
